@@ -1,0 +1,524 @@
+.blindspot-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  position: relative;
+  z-index: 1;
+}
+
+.blindspot-section::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  background: var(--canvas-blind);
+  background-size: cover;
+  background-position: center;
+  transition: background var(--dur-normal) var(--ease-out-soft);
+}
+
+/* ─── Header ──────────────────────────────────────────────── */
+.blindspot-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--space-6) var(--space-5) var(--space-4);
+  animation: fade-in var(--dur-slow) var(--ease-out-soft) both;
+}
+
+.blindspot-section__title {
+  font-family: var(--font-display);
+  font-size: var(--type-xl);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  color: var(--color-text-primary);
+  line-height: 1.1;
+}
+
+.blindspot-section__subtitle {
+  font-size: var(--type-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+  font-weight: 400;
+}
+
+/* Refresh Button */
+.blindspot-refresh-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background var(--dur-fast) var(--ease-out-soft),
+    color var(--dur-fast),
+    transform var(--dur-fast) var(--ease-spring),
+    border-color var(--dur-fast);
+}
+
+.blindspot-refresh-btn:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  color: var(--color-accent-blind);
+  border-color: var(--color-accent-blind);
+  transform: scale(1.05);
+}
+
+.blindspot-refresh-btn:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+.blindspot-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.blindspot-refresh-btn svg.spinning {
+  animation: orb-spin 0.8s linear infinite;
+}
+
+/* ─── Stats Bar ───────────────────────────────────────────── */
+.blindspot-stats {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  animation: fade-in var(--dur-slow) var(--ease-out-soft) 60ms both;
+}
+
+.blindspot-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.blindspot-stat__num {
+  font-family: var(--font-mono);
+  font-size: var(--type-md);
+  font-weight: 500;
+  color: var(--color-accent-blind);
+  line-height: 1;
+}
+
+.blindspot-stat__label {
+  font-size: var(--type-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.blindspot-stat__divider {
+  width: 1px;
+  height: 28px;
+  background: var(--color-border);
+}
+
+/* ─── Error Banner ────────────────────────────────────────── */
+.blindspot-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-accent-blind-soft);
+  border-bottom: 1px solid var(--color-accent-blind);
+  font-size: var(--type-xs);
+  color: var(--color-accent-blind);
+}
+
+.blindspot-error__note {
+  color: var(--color-text-muted);
+}
+
+/* ─── Feed ────────────────────────────────────────────────── */
+.blindspot-feed {
+  flex: 1;
+  padding: var(--space-5) var(--space-5) calc(var(--nav-h) + var(--space-8));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Skeleton Loaders */
+.blindspot-skeleton {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: hidden;
+}
+
+.blindspot-skeleton__bar {
+  height: 14px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-surface) 25%,
+    var(--color-border) 50%,
+    var(--color-bg-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.blindspot-skeleton__bar--sm {
+  height: 12px;
+  margin-top: var(--space-1);
+}
+
+.blindspot-skeleton__tag {
+  width: 64px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-surface) 25%,
+    var(--color-border) 50%,
+    var(--color-bg-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  margin-top: var(--space-2);
+}
+
+/* Empty State */
+.blindspot-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-16) var(--space-8);
+  gap: var(--space-3);
+  animation: fade-in var(--dur-slow) var(--ease-out-soft) both;
+}
+
+.blindspot-empty__icon {
+  font-size: 2.5rem;
+  opacity: 0.4;
+}
+
+.blindspot-empty__title {
+  font-size: var(--type-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.blindspot-empty__body {
+  font-size: var(--type-sm);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  max-width: 280px;
+  margin: 0;
+}
+
+/* ─── Insight Card ────────────────────────────────────────── */
+.blindspot-card {
+  position: relative;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  animation: fade-in var(--dur-normal) var(--ease-spring) both;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-normal) var(--ease-out-soft),
+    border-color var(--dur-normal);
+}
+
+.blindspot-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+}
+
+/* Colored left accent bar */
+.blindspot-card__accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.blindspot-card--positive .blindspot-card__accent {
+  background: var(--color-accent-oracle);
+}
+
+.blindspot-card--negative .blindspot-card__accent {
+  background: var(--color-accent-blind);
+}
+
+.blindspot-card--neutral .blindspot-card__accent {
+  background: var(--color-text-muted);
+}
+
+.blindspot-card--positive:hover {
+  border-color: var(--color-accent-oracle);
+}
+
+.blindspot-card--negative:hover {
+  border-color: var(--color-accent-blind);
+}
+
+.blindspot-card__body {
+  padding: var(--space-4) var(--space-5) var(--space-3) calc(var(--space-5) + 3px);
+}
+
+.blindspot-card__pattern {
+  font-size: var(--type-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.4;
+  margin: 0 0 var(--space-2);
+}
+
+.blindspot-card__example {
+  font-size: var(--type-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+  line-height: 1.5;
+  margin: 0 0 var(--space-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Chip tags */
+.blindspot-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.blindspot-card__chip {
+  font-family: var(--font-mono);
+  font-size: var(--type-xs);
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.blindspot-card__chip--freq {
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+}
+
+.blindspot-card__chip--positive {
+  background: var(--color-accent-oracle-soft);
+  color: var(--color-accent-oracle);
+  border-color: var(--color-accent-oracle);
+}
+
+.blindspot-card__chip--negative {
+  background: var(--color-accent-blind-soft);
+  color: var(--color-accent-blind);
+  border-color: var(--color-accent-blind);
+}
+
+.blindspot-card__chip--neutral {
+  background: var(--color-bg-surface);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+.blindspot-card__chip--date {
+  background: var(--color-bg-surface);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+/* Frequency bar */
+.blindspot-card__bar-wrap {
+  height: 3px;
+  background: var(--color-border);
+  margin-top: var(--space-3);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.blindspot-card__freq-bar {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-blind);
+  transition: width 0.6s var(--ease-out-soft);
+}
+
+.blindspot-card--positive .blindspot-card__freq-bar {
+  background: var(--color-accent-oracle);
+}
+
+/* ─── DESKTOP LAYOUT TRANSFORMS ───────────────────────────── */
+@media (min-width: 768px) {
+  .blindspot-section {
+    overflow-y: auto;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 0 var(--space-4);
+  }
+
+  .blindspot-section__header {
+    padding: var(--space-8) var(--space-8) var(--space-4);
+    align-items: center;
+  }
+
+  .blindspot-section__title {
+    font-size: var(--type-2xl);
+  }
+
+  .blindspot-stats {
+    margin: 0 var(--space-4);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-1);
+  }
+
+  /* 3-column grid on desktop */
+  .blindspot-feed {
+    padding: var(--space-6) var(--space-8) var(--space-10);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: min-content;
+    gap: var(--space-4);
+    align-items: start;
+  }
+
+  .blindspot-empty {
+    grid-column: 1 / -1;
+    padding: var(--space-12) var(--space-8);
+  }
+
+  .blindspot-skeleton {
+    min-height: 120px;
+  }
+
+  /* Larger card text on desktop */
+  .blindspot-card__pattern {
+    font-size: var(--type-base);
+  }
+}
+
+/* Medium desktop: 2 columns */
+@media (min-width: 768px) and (max-width: 1100px) {
+  .blindspot-feed {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ============================================================
+   PHASE 6 ADDITIONS
+   ============================================================ */
+
+/* ─── Premium Shimmer Skeleton Loader ─────────────────────── */
+.blindspot-skeleton-shimmer {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  position: relative;
+  overflow: hidden;
+  min-height: 120px;
+}
+
+/* The shimmer gradient overlay */
+.blindspot-skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(0 0% 100% / 0.1) 20%,
+    hsl(0 0% 100% / 0.3) 50%,
+    hsl(0 0% 100% / 0.1) 80%,
+    transparent 100%
+  );
+  /* Use a slightly darker gradient for dark mode */
+  transform: translateX(-100%);
+  animation: shimmer 2s infinite ease-out;
+}
+
+[data-theme="dark"] .blindspot-skeleton-shimmer::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(0 0% 100% / 0.02) 20%,
+    hsl(0 0% 100% / 0.06) 50%,
+    hsl(0 0% 100% / 0.02) 80%,
+    transparent 100%
+  );
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.blindspot-skeleton-shimmer__bar {
+  height: 14px;
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
+  opacity: 0.7;
+}
+
+.blindspot-skeleton-shimmer__bar--sm {
+  height: 10px;
+  margin-top: var(--space-1);
+}
+
+.blindspot-skeleton-shimmer__tag {
+  height: 20px;
+  width: 60px;
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+  margin-top: auto;
+  opacity: 0.5;
+}
+
+/* ─── Blindspot Card Title/Desc Formatting ───────────────── */
+.blindspot-card__description {
+  font-size: var(--type-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-3);
+}
+
+/* ─── Error Actions ───────────────────────────────────────── */
+.blindspot-error__action {
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--type-xs);
+  cursor: pointer;
+  font-weight: 500;
+  margin-left: auto;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.blindspot-error__action:hover {
+  background: currentColor;
+  color: var(--color-bg-base);
+}

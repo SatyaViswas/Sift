@@ -1,0 +1,122 @@
+/* ─── Desktop: BottomNav is hidden — SidebarNav handles navigation ─ */
+@media (min-width: 768px) {
+  .bottom-nav {
+    display: none;
+  }
+}
+
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-h);
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  /* Safe area inset for notched devices */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 100;
+  transition:
+    background var(--dur-normal) var(--ease-out-soft),
+    border-color var(--dur-normal) var(--ease-out-soft);
+}
+
+.bottom-nav__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 100%;
+  padding: 0 var(--space-2);
+}
+
+/* ─── Tab Button ──────────────────────────────────────────── */
+.bottom-nav__tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  flex: 1;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+  transition:
+    color var(--dur-normal) var(--ease-out-soft),
+    background var(--dur-normal) var(--ease-out-soft),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+.bottom-nav__tab:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
+}
+
+.bottom-nav__tab:active {
+  transform: scale(0.93);
+}
+
+/* ─── Active State ────────────────────────────────────────── */
+.bottom-nav__tab--active {
+  color: var(--color-text-primary);
+}
+
+/* Each tab has its own accent color when active */
+.bottom-nav__tab--active[data-tab="slate"] {
+  color: var(--color-accent-slate);
+}
+.bottom-nav__tab--active[data-tab="oracle"] {
+  color: var(--color-accent-oracle);
+}
+.bottom-nav__tab--active[data-tab="blindspots"] {
+  color: var(--color-accent-blind);
+}
+
+/* ─── Icon ────────────────────────────────────────────────── */
+.bottom-nav__icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--dur-normal) var(--ease-spring);
+}
+
+.bottom-nav__tab--active .bottom-nav__icon {
+  transform: scale(1.12) translateY(-1px);
+}
+
+/* ─── Label ───────────────────────────────────────────────── */
+.bottom-nav__label {
+  font-size: var(--type-xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  transition: opacity var(--dur-normal) var(--ease-out-soft);
+}
+
+.bottom-nav__tab--active .bottom-nav__label {
+  font-weight: 600;
+}
+
+/* ─── Active Pip Indicator ────────────────────────────────── */
+.bottom-nav__pip {
+  position: absolute;
+  top: 6px;
+  width: 20px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  animation: fade-in var(--dur-normal) var(--ease-spring) both;
+}
+
+[data-tab="slate"] .bottom-nav__pip      { background: var(--color-accent-slate); }
+[data-tab="oracle"] .bottom-nav__pip     { background: var(--color-accent-oracle); }
+[data-tab="blindspots"] .bottom-nav__pip { background: var(--color-accent-blind); }
+
+/* ─── Glassmorphism on dark ───────────────────────────────── */
+[data-theme="dark"] .bottom-nav {
+  background: hsl(228 24% 11% / 0.85);
+  border-top-color: var(--color-border);
+}

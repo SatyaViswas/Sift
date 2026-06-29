@@ -1,0 +1,193 @@
+/* ============================================================
+   SIFT — GLOBAL RESET & BASE STYLES
+   index.css
+   ============================================================ */
+
+@import './tokens.css';
+
+/* ─── BOX MODEL RESET ─────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─── ROOT & HTML ─────────────────────────────────────────── */
+html {
+  height: 100%;
+  /* Native browser chrome adapts to theme */
+  color-scheme: light dark;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100%;
+  font-family: var(--font-body);
+  font-size: var(--type-base);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background-color var(--dur-normal) var(--ease-out-soft),
+    color var(--dur-normal) var(--ease-out-soft);
+}
+
+#root {
+  height: 100%;
+  min-height: 100dvh;
+}
+
+/* ─── TYPOGRAPHY ──────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-body);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}
+
+p {
+  line-height: 1.65;
+  color: var(--color-text-secondary);
+}
+
+/* ─── INPUTS ──────────────────────────────────────────────── */
+input,
+textarea,
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* ─── SCROLLBARS (Custom, minimal) ───────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ─── FOCUS VISIBLE ───────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* ─── REDUCED MOTION ──────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── KEYFRAMES ───────────────────────────────────────────── */
+
+/* Orb pulse ring — Listening state */
+@keyframes orb-ring-pulse {
+  0%   { transform: translate(-50%, -50%) scale(1);   opacity: 0.7; }
+  100% { transform: translate(-50%, -50%) scale(1.85); opacity: 0; }
+}
+
+/* Orb spinner — Processing state */
+@keyframes orb-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Orb breathe — Speaking state */
+@keyframes orb-breathe {
+  0%, 100% { transform: scaleX(1) scaleY(1); }
+  33%       { transform: scaleX(1.08) scaleY(0.94); }
+  66%       { transform: scaleX(0.93) scaleY(1.07); }
+}
+
+/* Orb error shake */
+@keyframes orb-shake {
+  0%, 100% { transform: translateX(0); }
+  15%      { transform: translateX(-7px); }
+  35%      { transform: translateX(7px); }
+  55%      { transform: translateX(-5px); }
+  75%      { transform: translateX(5px); }
+  90%      { transform: translateX(-2px); }
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* Dot pulse — Oracle loading */
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: translateY(0);   opacity: 0.4; }
+  40%           { transform: translateY(-6px); opacity: 1;   }
+}
+
+/* Slide in from bottom — toast entry */
+@keyframes toast-in {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Section slide directions */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+@keyframes slide-in-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes slide-out-left {
+  from { transform: translateX(0);     opacity: 1; }
+  to   { transform: translateX(-100%); opacity: 0; }
+}
+@keyframes slide-out-right {
+  from { transform: translateX(0);    opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
+
+/* Fade in */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Canvas bg drift */
+@keyframes canvas-drift {
+  0%, 100% { background-position: 50% 40%; }
+  50%       { background-position: 50% 55%; }
+}
+
+/* Header logo shimmer text */
+@keyframes text-shimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}

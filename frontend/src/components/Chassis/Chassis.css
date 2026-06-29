@@ -1,0 +1,99 @@
+/* ============================================================
+   CHASSIS — Adaptive Structural Layout
+   Mobile  < 768px : full-viewport native app
+   Desktop ≥ 768px : full-width sidebar + expansive main panel
+   ============================================================ */
+
+/* ─── ROOT SHELL ──────────────────────────────────────────── */
+.app-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  width: 100%;
+  background: var(--color-bg-base);
+  position: relative;
+  overflow-x: hidden;
+  transition: background var(--dur-normal) var(--ease-out-soft);
+}
+
+/* Desktop: switch to horizontal split */
+@media (min-width: 768px) {
+  .app-root {
+    flex-direction: row;
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
+/* ─── AMBIENT BLOBS (desktop decorative) ─────────────────── */
+.app-root__blob {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .app-root__blob {
+    display: block;
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+    transition:
+      background var(--dur-canvas) var(--ease-out-soft),
+      opacity var(--dur-canvas) var(--ease-out-soft);
+  }
+
+  .app-root__blob--1 {
+    width: 600px;
+    height: 600px;
+    top: -160px;
+    right: -100px;
+    opacity: 0.12;
+  }
+
+  .app-root__blob--2 {
+    width: 500px;
+    height: 500px;
+    bottom: -120px;
+    left: 200px;
+    opacity: 0.10;
+  }
+
+  /* Section-specific blob colors */
+  .app-root--slate .app-root__blob--1        { background: var(--prim-amber-400); }
+  .app-root--slate .app-root__blob--2        { background: var(--prim-rose-400); }
+  .app-root--oracle .app-root__blob--1       { background: var(--prim-sage-400); }
+  .app-root--oracle .app-root__blob--2       { background: var(--prim-indigo-500); }
+  .app-root--blindspots .app-root__blob--1   { background: var(--prim-rose-400); }
+  .app-root--blindspots .app-root__blob--2   { background: var(--prim-indigo-500); }
+
+  [data-theme="dark"] .app-root__blob--1 { opacity: 0.09; }
+  [data-theme="dark"] .app-root__blob--2 { opacity: 0.07; }
+}
+
+/* ─── MAIN CONTENT COLUMN ─────────────────────────────────── */
+.app-root__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  background: var(--color-bg-base);
+  transition: background var(--dur-normal) var(--ease-out-soft);
+}
+
+/* Mobile: fill full viewport height */
+@media (max-width: 767px) {
+  .app-root__main {
+    height: 100dvh;
+  }
+}
+
+/* ─── MOBILE-ONLY ELEMENTS ────────────────────────────────── */
+/* AppHeader and BottomNav hide themselves on desktop via their own CSS */
+
+/* ─── DESKTOP TOPBAR (thin section-title bar above content) ─ */
+/* Applied via the section header; no extra element needed */

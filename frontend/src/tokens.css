@@ -1,0 +1,205 @@
+/* ============================================================
+   SIFT — DESIGN TOKEN SYSTEM
+   tokens.css  |  3-Tier: Primitives → Semantic → Component
+   ============================================================ */
+
+/* ─── TIER 1: PRIMITIVES ──────────────────────────────────── */
+:root {
+  /* Paper / Stone scale */
+  --prim-paper-white:   hsl(40, 20%, 97%);
+  --prim-stone-50:      hsl(40, 22%, 99%);
+  --prim-stone-100:     hsl(38, 15%, 93%);
+  --prim-stone-200:     hsl(38, 12%, 86%);
+  --prim-stone-300:     hsl(38, 10%, 76%);
+
+  /* Ink scale */
+  --prim-ink-900:       hsl(220, 25%, 12%);
+  --prim-ink-700:       hsl(220, 20%, 24%);
+  --prim-ink-600:       hsl(220, 15%, 38%);
+  --prim-ink-400:       hsl(220, 10%, 58%);
+  --prim-ink-300:       hsl(220, 8%, 72%);
+
+  /* Void / Midnight scale */
+  --prim-void-950:      hsl(228, 28%, 8%);
+  --prim-void-900:      hsl(228, 24%, 11%);
+  --prim-void-800:      hsl(228, 20%, 16%);
+  --prim-void-700:      hsl(228, 16%, 22%);
+  --prim-void-600:      hsl(228, 14%, 28%);
+
+  /* Ghost / Luminescent scale */
+  --prim-ghost-50:      hsl(220, 25%, 96%);
+  --prim-ghost-100:     hsl(220, 18%, 90%);
+  --prim-ghost-300:     hsl(220, 14%, 74%);
+  --prim-ghost-400:     hsl(220, 12%, 65%);
+  --prim-ghost-600:     hsl(220, 10%, 42%);
+
+  /* Slate accent — Amber/Gold */
+  --prim-amber-300:     hsl(38, 95%, 72%);
+  --prim-amber-400:     hsl(38, 90%, 62%);
+  --prim-amber-500:     hsl(38, 82%, 52%);
+
+  /* Oracle accent — Sage/Green */
+  --prim-sage-300:      hsl(152, 40%, 68%);
+  --prim-sage-400:      hsl(152, 30%, 54%);
+  --prim-sage-500:      hsl(152, 28%, 44%);
+
+  /* Blindspot accent — Rose/Violet */
+  --prim-rose-300:      hsl(350, 80%, 72%);
+  --prim-rose-400:      hsl(350, 70%, 65%);
+  --prim-rose-500:      hsl(350, 65%, 55%);
+
+  /* Processing accent — Indigo */
+  --prim-indigo-300:    hsl(245, 80%, 75%);
+  --prim-indigo-400:    hsl(245, 70%, 68%);
+  --prim-indigo-500:    hsl(245, 60%, 58%);
+}
+
+/* ─── TIER 2: SEMANTIC TOKENS (Light Mode — default) ──────── */
+:root,
+[data-theme="light"] {
+  /* Surfaces */
+  --color-bg-canvas:      hsl(38, 18%, 90%);
+  --color-bg-base:        var(--prim-paper-white);
+  --color-bg-surface:     var(--prim-stone-100);
+  --color-bg-elevated:    hsl(40, 22%, 100%);
+  --color-bg-input:       hsl(40, 20%, 99%);
+
+  /* Text */
+  --color-text-primary:   var(--prim-ink-900);
+  --color-text-secondary: var(--prim-ink-600);
+  --color-text-muted:     var(--prim-ink-400);
+  --color-text-inverse:   var(--prim-stone-50);
+
+  /* Borders */
+  --color-border:         hsl(38, 12%, 88%);
+  --color-border-strong:  var(--prim-stone-300);
+  --color-border-focus:   var(--prim-amber-400);
+
+  /* Accents per section */
+  --color-accent-slate:        var(--prim-amber-400);
+  --color-accent-slate-soft:   hsl(38, 90%, 62%, 0.12);
+  --color-accent-slate-glow:   hsl(38, 90%, 62%, 0.35);
+  --color-accent-oracle:       var(--prim-sage-400);
+  --color-accent-oracle-soft:  hsl(152, 30%, 54%, 0.12);
+  --color-accent-oracle-glow:  hsl(152, 30%, 54%, 0.35);
+  --color-accent-blind:        var(--prim-rose-400);
+  --color-accent-blind-soft:   hsl(350, 70%, 65%, 0.12);
+  --color-accent-blind-glow:   hsl(350, 70%, 65%, 0.35);
+  --color-accent-processing:   var(--prim-indigo-500);
+
+  /* Orb */
+  --color-orb-idle:       var(--prim-stone-200);
+  --color-orb-idle-icon:  var(--prim-ink-400);
+
+  /* Canvas atmospheric gradients per section */
+  --canvas-slate:  radial-gradient(ellipse at 50% 40%, hsl(38, 60%, 85%) 0%, hsl(38, 18%, 90%) 70%);
+  --canvas-oracle: radial-gradient(ellipse at 50% 40%, hsl(152, 35%, 82%) 0%, hsl(38, 18%, 90%) 70%);
+  --canvas-blind:  radial-gradient(ellipse at 50% 40%, hsl(350, 40%, 85%) 0%, hsl(38, 18%, 90%) 70%);
+
+  /* Shadows */
+  --shadow-1: 0 1px 3px hsl(220 20% 10% / 0.07), 0 1px 2px hsl(220 20% 10% / 0.05);
+  --shadow-2: 0 4px 12px hsl(220 20% 10% / 0.09), 0 2px 4px hsl(220 20% 10% / 0.06);
+  --shadow-3: 0 8px 24px hsl(220 20% 10% / 0.11), 0 4px 8px hsl(220 20% 10% / 0.07);
+  --shadow-chassis: 0 40px 100px hsl(220 20% 10% / 0.22), 0 10px 30px hsl(220 20% 10% / 0.12), 0 2px 6px hsl(220 20% 10% / 0.08);
+  --chassis-border-opacity: 0.18;
+
+  /* Color scheme — tells browser to style scrollbars/inputs light */
+  color-scheme: light;
+}
+
+/* ─── TIER 2 OVERRIDE: Dark Mode ──────────────────────────── */
+[data-theme="dark"] {
+  --color-bg-canvas:      hsl(228, 30%, 5%);
+  --color-bg-base:        var(--prim-void-950);
+  --color-bg-surface:     var(--prim-void-900);
+  --color-bg-elevated:    var(--prim-void-800);
+  --color-bg-input:       var(--prim-void-700);
+
+  --color-text-primary:   var(--prim-ghost-100);
+  --color-text-secondary: var(--prim-ghost-400);
+  --color-text-muted:     var(--prim-ghost-600);
+  --color-text-inverse:   var(--prim-void-950);
+
+  --color-border:         hsl(228, 16%, 20%);
+  --color-border-strong:  hsl(228, 14%, 26%);
+  --color-border-focus:   var(--prim-amber-300);
+
+  --color-accent-slate:       var(--prim-amber-300);
+  --color-accent-slate-soft:  hsl(38, 95%, 72%, 0.10);
+  --color-accent-slate-glow:  hsl(38, 95%, 72%, 0.30);
+  --color-accent-oracle:      var(--prim-sage-300);
+  --color-accent-oracle-soft: hsl(152, 40%, 68%, 0.10);
+  --color-accent-oracle-glow: hsl(152, 40%, 68%, 0.30);
+  --color-accent-blind:       var(--prim-rose-300);
+  --color-accent-blind-soft:  hsl(350, 80%, 72%, 0.10);
+  --color-accent-blind-glow:  hsl(350, 80%, 72%, 0.30);
+  --color-accent-processing:  var(--prim-indigo-300);
+
+  --color-orb-idle:       var(--prim-void-700);
+  --color-orb-idle-icon:  var(--prim-ghost-400);
+
+  --canvas-slate:  radial-gradient(ellipse at 50% 40%, hsl(38, 40%, 14%) 0%, hsl(228, 28%, 7%) 70%);
+  --canvas-oracle: radial-gradient(ellipse at 50% 40%, hsl(152, 25%, 13%) 0%, hsl(228, 28%, 7%) 70%);
+  --canvas-blind:  radial-gradient(ellipse at 50% 40%, hsl(350, 30%, 14%) 0%, hsl(228, 28%, 7%) 70%);
+
+  --shadow-1: 0 1px 3px hsl(0 0% 0% / 0.20), 0 1px 2px hsl(0 0% 0% / 0.14);
+  --shadow-2: 0 4px 12px hsl(0 0% 0% / 0.28), 0 2px 4px hsl(0 0% 0% / 0.18);
+  --shadow-3: 0 8px 24px hsl(0 0% 0% / 0.35), 0 4px 8px hsl(0 0% 0% / 0.22);
+  --shadow-chassis: 0 40px 100px hsl(0 0% 0% / 0.65), 0 10px 30px hsl(0 0% 0% / 0.45), 0 2px 6px hsl(0 0% 0% / 0.30);
+  --chassis-border-opacity: 0.06;
+
+  color-scheme: dark;
+}
+
+/* ─── TIER 3: COMPONENT TOKENS ────────────────────────────── */
+:root {
+  /* Typography */
+  --font-display:   'Fraunces', Georgia, serif;
+  --font-body:      'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:      'DM Mono', 'Fira Code', monospace;
+
+  --type-xs:   0.75rem;
+  --type-sm:   0.875rem;
+  --type-base: 1rem;
+  --type-md:   1.125rem;
+  --type-lg:   1.375rem;
+  --type-xl:   1.75rem;
+  --type-2xl:  2.25rem;
+
+  /* Spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radii */
+  --radius-sm:      6px;
+  --radius-md:      12px;
+  --radius-lg:      20px;
+  --radius-xl:      28px;
+  --radius-pill:    9999px;
+  --radius-chassis: 44px;
+
+  /* Motion */
+  --ease-spring:   cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-soft:  cubic-bezier(0.64, 0, 0.78, 0);
+  --dur-fast:   150ms;
+  --dur-normal: 280ms;
+  --dur-slide:  320ms;
+  --dur-canvas: 600ms;
+  --dur-slow:   480ms;
+
+  /* Chassis dimensions */
+  --chassis-w: 390px;
+  --chassis-h: 844px;
+
+  /* Nav bar height */
+  --nav-h: 80px;
+}

@@ -1,0 +1,115 @@
+/* ─── Desktop: AppHeader is hidden — SidebarNav takes over ─ */
+@media (min-width: 768px) {
+  .app-header {
+    display: none;
+  }
+}
+
+.app-header {
+  position: relative;
+  height: 64px;
+  flex-shrink: 0;
+  background: var(--color-bg-base);
+  border-bottom: 1px solid var(--color-border);
+  transition:
+    background var(--dur-normal) var(--ease-out-soft),
+    border-color var(--dur-normal) var(--ease-out-soft);
+  z-index: 50;
+}
+
+.app-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding: 0 var(--space-5);
+}
+
+/* ─── Wordmark ────────────────────────────────────────────── */
+.app-header__wordmark {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  user-select: none;
+}
+
+.app-header__logo-text {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  /* Animated shimmer gradient on the wordmark */
+  background: linear-gradient(
+    120deg,
+    var(--color-text-primary) 0%,
+    var(--color-text-secondary) 40%,
+    var(--color-text-primary) 80%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: text-shimmer 6s linear infinite;
+}
+
+/* Accent dot shifts color based on active section */
+.app-header__logo-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  margin-left: 1px;
+  margin-bottom: 6px;
+  transition:
+    background var(--dur-slow) var(--ease-spring),
+    box-shadow var(--dur-slow) var(--ease-spring);
+}
+.app-header--slate .app-header__logo-dot {
+  background: var(--color-accent-slate);
+  box-shadow: 0 0 6px var(--color-accent-slate-glow);
+}
+.app-header--oracle .app-header__logo-dot {
+  background: var(--color-accent-oracle);
+  box-shadow: 0 0 6px var(--color-accent-oracle-glow);
+}
+.app-header--blindspots .app-header__logo-dot {
+  background: var(--color-accent-blind);
+  box-shadow: 0 0 6px var(--color-accent-blind-glow);
+}
+
+/* ─── Controls ────────────────────────────────────────────── */
+.app-header__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ─── Accent Line ─────────────────────────────────────────── */
+.app-header__accent-line {
+  position: absolute;
+  bottom: -1px;
+  left: var(--space-5);
+  right: var(--space-5);
+  height: 2px;
+  border-radius: var(--radius-pill);
+  transition:
+    background var(--dur-slow) var(--ease-spring),
+    opacity var(--dur-normal) var(--ease-out-soft);
+  opacity: 0.6;
+}
+.app-header--slate .app-header__accent-line {
+  background: linear-gradient(to right, var(--color-accent-slate), transparent);
+}
+.app-header--oracle .app-header__accent-line {
+  background: linear-gradient(to right, var(--color-accent-oracle), transparent);
+}
+.app-header--blindspots .app-header__accent-line {
+  background: linear-gradient(to right, var(--color-accent-blind), transparent);
+}
+
+/* ─── Dark mode refinements ───────────────────────────────── */
+[data-theme="dark"] .app-header {
+  background: hsl(228 28% 8% / 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}

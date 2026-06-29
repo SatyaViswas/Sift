@@ -1,0 +1,252 @@
+/* ============================================================
+   MicOrb — Standalone Microphone Orb Component
+   All 5 states driven by .mic-orb--{state} class.
+   ============================================================ */
+
+.mic-orb-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  position: relative;
+}
+
+/* ─── Pulse Rings (Listening) ─────────────────────────────── */
+.mic-orb__ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--color-accent-slate);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.mic-orb__ring--1 {
+  animation: orb-ring-pulse 1.8s ease-out infinite;
+}
+
+.mic-orb__ring--2 {
+  border-color: hsl(38 90% 62% / 0.5);
+  animation: orb-ring-pulse 1.8s ease-out 0.65s infinite;
+}
+
+/* ─── Core Orb Button ─────────────────────────────────────── */
+.mic-orb {
+  position: relative;
+  z-index: 1;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  transition:
+    transform var(--dur-normal) var(--ease-spring),
+    box-shadow var(--dur-slow) var(--ease-out-soft),
+    background var(--dur-normal) var(--ease-out-soft),
+    color var(--dur-normal) var(--ease-out-soft);
+}
+
+.mic-orb:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 4px;
+}
+
+/* ─── STATE: idle ─────────────────────────────────────────── */
+.mic-orb--idle {
+  background: var(--color-orb-idle);
+  border: 1.5px solid var(--color-border);
+  color: var(--color-orb-idle-icon);
+  box-shadow:
+    var(--shadow-2),
+    inset 0 1px 0 hsl(0 0% 100% / 0.06);
+}
+
+.mic-orb--idle:hover {
+  transform: scale(1.07);
+  box-shadow: var(--shadow-3), inset 0 1px 0 hsl(0 0% 100% / 0.08);
+  background: var(--color-bg-surface);
+}
+
+.mic-orb--idle:active {
+  transform: scale(0.94);
+}
+
+/* ─── STATE: listening ────────────────────────────────────── */
+.mic-orb--listening {
+  background: radial-gradient(circle at 38% 38%,
+    var(--prim-amber-300),
+    var(--prim-amber-500) 60%,
+    var(--prim-rose-400) 100%
+  );
+  color: white;
+  transform: scale(1.18);
+  box-shadow:
+    0 0 0 3px var(--color-accent-slate),
+    0 0 32px var(--color-accent-slate-glow),
+    var(--shadow-3);
+  animation: mic-orb-breathe 2s ease-in-out infinite;
+  border: none;
+}
+
+.mic-orb--listening:hover {
+  transform: scale(1.22);
+}
+
+.mic-orb--listening:active {
+  transform: scale(1.05);
+}
+
+@keyframes mic-orb-breathe {
+  0%, 100% { box-shadow: 0 0 0 3px var(--color-accent-slate), 0 0 28px var(--color-accent-slate-glow), var(--shadow-3); }
+  50%       { box-shadow: 0 0 0 5px var(--color-accent-slate), 0 0 48px var(--color-accent-slate-glow), var(--shadow-3); }
+}
+
+/* ─── STATE: processing ───────────────────────────────────── */
+.mic-orb--processing {
+  background: conic-gradient(
+    from 0deg,
+    var(--prim-indigo-400),
+    var(--prim-indigo-300),
+    var(--prim-sage-300),
+    var(--prim-indigo-400)
+  );
+  color: white;
+  animation: orb-spin 1.8s linear infinite;
+  box-shadow:
+    0 0 0 2px var(--prim-indigo-400),
+    0 0 24px hsl(245 70% 68% / 0.45),
+    var(--shadow-3);
+  border: none;
+  cursor: not-allowed;
+}
+
+/* ─── STATE: speaking ─────────────────────────────────────── */
+.mic-orb--speaking {
+  background: radial-gradient(circle at 38% 38%,
+    var(--prim-sage-300),
+    var(--prim-sage-500) 80%
+  );
+  color: white;
+  box-shadow:
+    0 0 0 3px var(--color-accent-oracle),
+    0 0 28px var(--color-accent-oracle-glow),
+    var(--shadow-3);
+  animation: mic-orb-breathe-sage 2.5s ease-in-out infinite;
+  border: none;
+}
+
+@keyframes mic-orb-breathe-sage {
+  0%, 100% { box-shadow: 0 0 0 3px var(--color-accent-oracle), 0 0 24px var(--color-accent-oracle-glow), var(--shadow-3); }
+  50%       { box-shadow: 0 0 0 6px var(--color-accent-oracle), 0 0 44px var(--color-accent-oracle-glow), var(--shadow-3); }
+}
+
+/* ─── STATE: error ────────────────────────────────────────── */
+.mic-orb--error {
+  background: radial-gradient(circle at 38% 38%,
+    var(--prim-rose-300),
+    var(--prim-rose-500) 80%
+  );
+  color: white;
+  animation: orb-shake 0.45s var(--ease-spring) both;
+  box-shadow:
+    0 0 0 3px var(--color-accent-blind),
+    0 0 22px var(--color-accent-blind-glow),
+    var(--shadow-3);
+  border: none;
+}
+
+.mic-orb--error:hover {
+  transform: scale(1.06);
+}
+
+/* ─── Icon ────────────────────────────────────────────────── */
+.mic-orb__icon {
+  transition: opacity var(--dur-normal) var(--ease-out-soft);
+  pointer-events: none;
+}
+
+/* ─── Processing Dots ─────────────────────────────────────── */
+.mic-orb__dots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.mic-orb__dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: white;
+  animation: dot-bounce 1.2s ease-in-out infinite;
+}
+
+.mic-orb__dots span:nth-child(1) { animation-delay: 0ms; }
+.mic-orb__dots span:nth-child(2) { animation-delay: 150ms; }
+.mic-orb__dots span:nth-child(3) { animation-delay: 300ms; }
+
+/* ─── Waveform Bars (Speaking) ────────────────────────────── */
+.mic-orb__wave {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  height: 24px;
+  pointer-events: none;
+}
+
+.mic-orb__wave span {
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: white;
+  transform-origin: bottom;
+}
+
+.mic-orb__wave span:nth-child(1) { height: 10px; animation: wave-bar 1.2s 0.0s  ease-in-out infinite; }
+.mic-orb__wave span:nth-child(2) { height: 18px; animation: wave-bar 1.2s 0.15s ease-in-out infinite; }
+.mic-orb__wave span:nth-child(3) { height: 24px; animation: wave-bar 1.2s 0.3s  ease-in-out infinite; }
+.mic-orb__wave span:nth-child(4) { height: 18px; animation: wave-bar 1.2s 0.45s ease-in-out infinite; }
+.mic-orb__wave span:nth-child(5) { height: 10px; animation: wave-bar 1.2s 0.6s  ease-in-out infinite; }
+
+@keyframes wave-bar {
+  0%, 100% { transform: scaleY(0.4); opacity: 0.6; }
+  50%       { transform: scaleY(1);   opacity: 1;   }
+}
+
+/* ─── Hint Text ───────────────────────────────────────────── */
+.mic-orb__hint {
+  font-size: var(--type-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 500;
+  text-align: center;
+  transition: color var(--dur-normal) var(--ease-out-soft);
+  min-height: 1em;
+}
+
+/* ─── Unsupported Warning ─────────────────────────────────── */
+.mic-orb__unsupported {
+  font-size: var(--type-xs);
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.5;
+  max-width: 200px;
+  margin-top: var(--space-1);
+}
+
+/* ─── Disabled ────────────────────────────────────────────── */
+.mic-orb:disabled {
+  cursor: not-allowed;
+}
+
+.mic-orb--idle:disabled {
+  opacity: 0.45;
+}

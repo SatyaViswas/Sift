@@ -1,0 +1,116 @@
+.daily-prompt {
+  margin: 0 var(--space-5) var(--space-4);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  animation: fade-in var(--dur-slow) var(--ease-out-soft) 40ms both;
+}
+
+.daily-prompt__inner {
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle gradient watermark behind the text */
+.daily-prompt__inner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.06;
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+  background: radial-gradient(ellipse at 20% 50%, currentColor 0%, transparent 70%);
+}
+
+/* ─── Time-of-day colour themes ──────────────────────────── */
+.daily-prompt--morning .daily-prompt__inner {
+  background: linear-gradient(135deg, hsl(38 60% 96%) 0%, hsl(40 20% 99%) 100%);
+  border-color: hsl(38 40% 88%);
+  color: var(--prim-amber-500);
+}
+
+.daily-prompt--afternoon .daily-prompt__inner {
+  background: linear-gradient(135deg, hsl(42 55% 95%) 0%, hsl(40 20% 99%) 100%);
+  border-color: hsl(42 40% 88%);
+  color: var(--prim-amber-400);
+}
+
+.daily-prompt--evening .daily-prompt__inner {
+  background: linear-gradient(135deg, hsl(228 30% 96%) 0%, hsl(228 10% 99%) 100%);
+  border-color: hsl(228 20% 90%);
+  color: var(--prim-indigo-500);
+}
+
+.daily-prompt--night .daily-prompt__inner {
+  background: linear-gradient(135deg, hsl(245 25% 96%) 0%, hsl(228 10% 99%) 100%);
+  border-color: hsl(245 20% 90%);
+  color: var(--prim-indigo-400);
+}
+
+/* Dark mode overrides */
+[data-theme="dark"] .daily-prompt--morning .daily-prompt__inner {
+  background: linear-gradient(135deg, hsl(38 25% 14%) 0%, hsl(228 24% 12%) 100%);
+  border-color: hsl(38 20% 22%);
+}
+
+[data-theme="dark"] .daily-prompt--afternoon .daily-prompt__inner {
+  background: linear-gradient(135deg, hsl(42 22% 13%) 0%, hsl(228 24% 12%) 100%);
+  border-color: hsl(42 18% 22%);
+}
+
+[data-theme="dark"] .daily-prompt--evening .daily-prompt__inner {
+  background: linear-gradient(135deg, hsl(228 28% 13%) 0%, hsl(228 24% 11%) 100%);
+  border-color: hsl(228 22% 22%);
+}
+
+[data-theme="dark"] .daily-prompt--night .daily-prompt__inner {
+  background: linear-gradient(135deg, hsl(245 22% 13%) 0%, hsl(228 24% 11%) 100%);
+  border-color: hsl(245 18% 22%);
+}
+
+/* ─── Meta line ───────────────────────────────────────────── */
+.daily-prompt__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.daily-prompt__icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.daily-prompt__greeting {
+  font-size: var(--type-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+
+/* ─── Question ────────────────────────────────────────────── */
+.daily-prompt__question {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Desktop expansion ───────────────────────────────────── */
+@media (min-width: 768px) {
+  .daily-prompt {
+    margin: 0 var(--space-8) var(--space-5);
+  }
+
+  .daily-prompt__question {
+    font-size: 1.15rem;
+  }
+}

@@ -1,0 +1,45 @@
+.section-manager {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.section-manager__view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* Momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+}
+
+/* Desktop: section fills the main panel height properly */
+@media (min-width: 768px) {
+  .section-manager {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .section-manager__view {
+    height: 100%;
+  }
+}
+
+/* ─── Entry Animations ────────────────────────────────────── */
+.section--enter-right {
+  animation: slide-in-right var(--dur-slide) var(--ease-spring) both;
+}
+
+.section--enter-left {
+  animation: slide-in-left var(--dur-slide) var(--ease-spring) both;
+}
+
+.section--enter-up {
+  animation: slide-in-up var(--dur-slide) var(--ease-spring) both;
+}
