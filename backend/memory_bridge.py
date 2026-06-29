@@ -53,63 +53,13 @@ async def main():
             # Core Ingestion Path
             await cognee.remember(text, dataset_name=dataset_name)
             
-            # Immediate Paradox Analysis Loop
-            prompt = "Identify any specific rules, past outcomes, or behavioral loops in this user's history that directly relate to or conflict with the topics mentioned in the current text input."
-            historical_context = await cognee.recall(prompt, datasets=[dataset_name])
-            
-            if isinstance(historical_context, list):
-                historical_context_str = " ".join([str(item) for item in historical_context])
-            else:
-                historical_context_str = str(historical_context)
-
-            # The Conflict Evaluation Logic
-            system_prompt = (
-                "You are a Cognitive Guard. Your job is to review a user's new journal entry alongside their historical context. "
-                "Analyze the entry strictly for true behavioral loops, contradictions, or critical lifestyle patterns. "
-                "If no meaningful contradiction or pattern is found, you MUST return exactly: {\"status\": \"saved\"}. "
-                "If a contradiction or loop is found, return {\"status\": \"conflict\", \"message\": \"<conversational warning>\"}. "
-                "If a meaningful positive insight is found, return {\"status\": \"insight\", \"message\": \"<conversational feedback>\"}. "
-                "Output ONLY valid JSON, with no markdown formatting."
-            )
-            
-            user_prompt = f"Historical Context:\n{historical_context_str}\n\nNew Entry:\n{text}"
-
-            llm_response = await acompletion(
-                model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ]
-            )
-            
-            analysis_result = llm_response.choices[0].message.content.strip()
-            
-            if analysis_result.startswith("```json"):
-                analysis_result = analysis_result[7:-3].strip()
-            elif analysis_result.startswith("```"):
-                analysis_result = analysis_result[3:-3].strip()
-
-            try:
-                parsed = json.loads(analysis_result)
-                if parsed.get("status") in ["insight", "conflict"]:
-                    response = {
-                        "status": parsed["status"],
-                        "message": parsed.get("message", "Pattern detected.")
-                    }
-                else:
-                    response = {
-                        "status": "success", 
-                        "message": "Your thoughts are safely stored."
-                    }
-            except json.JSONDecodeError:
-                # Fallback if LLM didn't return valid JSON
-                response = {
-                    "status": "success",
-                    "message": "Your thoughts are safely stored."
-                }
+            response = {
+                "status": "success",
+                "message": "Stored!"
+            }
         except Exception as e:
             # Wrap ingestion exceptions to ensure the crash is safely stringified
-            raise Exception(f"Ingestion or Paradox Loop failed: {str(e)}")
+            raise Exception(f"Ingestion failed: {str(e)}")
 
     elif action == "recover":
         query = data.get("query", "")
@@ -124,16 +74,21 @@ async def main():
                 context_str = str(context)
 
             system_prompt = (
-                "You are a Conversational Pattern Analyst. Analyze the user's input query to determine their true intent "
-                "(e.g., Wellness/Anxiety relief, Entertainment/Boredom, Productivity optimization, or General recall). "
-                "Based on the historical graph data provided, infer their tastes and preferences. "
-                "STRICT DEDUPLICATION RULE: Identify what they have already explicitly tried, watched, or consumed in their history, "
-                "and EXCLUDE those exact items from your recommendation. Suggest a new, highly similar alternative instead. "
-                "You must output your decision strictly as a clean JSON object with EXACTLY these four keys: "
-                "`type` (must be one of: 'wellness', 'entertainment', 'general'), "
-                "`headline` (a brief, punchy title for your suggestion), "
-                "`recommendation` (the actionable advice or item suggestion), and "
-                "`rationale` (why this fits their pattern based on history). "
+                "You are an omniscient personal diary assistant acting as a Meta-Cognitive Intent Router. "
+                "Dynamically evaluate the user's request against their historical graph data across two cognitive matrices.\n\n"
+                "Matrix 1 - Content Behavior & Affinity Rules:\n"
+                "1. Disposable/Consumable Content (Movies, Series, Story Games, Novels): Apply taste-extraction and exclusion. Infer what they liked, but recommend an alternative so they don't get a repeat.\n"
+                "2. High-Affinity Repeatable Experiences (Sports, Cafes, Specific Foods, Hobbies, Routines): Apply affinity-reinforcement. If liked in the past, prioritize re-recommending that exact asset. Do not exclude unless they explicitly ask for something 'new'.\n"
+                "3. Explicit Historical Recall Queries ('Where did I go?', 'What did I like before?'): Apply strict graph alignment. Return exact matching historical records. No substitution or alternatives.\n\n"
+                "Matrix 2 - Dynamic Knowledge Sourcing (Internal Graph vs. External World):\n"
+                "- Scenario A (Pure Graph Lock): The graph data fully answers the query or the user seeks purely an internal memory. Output: 100% past data.\n"
+                "- Scenario B (Blended Augmentation): The graph contains their affinity, but external data is needed for a fresh recommendation or local context matching that affinity. Output: Primary Past Data + Secondary External Knowledge.\n"
+                "- Scenario C (Cold Start Fallback): The user asks a doubt about a topic with absolutely zero reference points in their historical graph. Output: Explicitly state that no personal history was found on this topic, then fulfill the request beautifully using pure external world knowledge.\n\n"
+                "You must output your decision strictly as a clean JSON object with EXACTLY these four keys:\n"
+                "`type` (must be one of: 'wellness', 'entertainment', 'general'),\n"
+                "`headline` (a brief, punchy title for your suggestion),\n"
+                "`recommendation` (the actionable advice, item suggestion, or memory recall), and\n"
+                "`rationale` (gracefully explain to the user *why* you are recommending an exact repeat, an alternative, or a fallback, matching the natural flow of an omniscient personal diary assistant).\n"
                 "Do not append any markdown decoration outside the raw JSON properties."
             )
             user_prompt = f"Historical Context:\n{context_str}\n\nUser Query/State:\n{query}"

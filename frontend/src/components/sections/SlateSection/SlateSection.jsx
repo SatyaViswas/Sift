@@ -3,7 +3,6 @@ import { ingestEntry, updateEntry } from '../../../utils/api';
 import { useSpeechRecognition } from '../../../hooks/useSpeechRecognition';
 import DailyPrompt from '../../DailyPrompt/DailyPrompt';
 import MicOrb from '../../MicOrb/MicOrb';
-import ParadoxAlert from '../../ParadoxAlert/ParadoxAlert';
 import './SlateSection.css';
 
 /**
@@ -241,7 +240,6 @@ export default function SlateSection() {
   const [editModal, setEditModal]     = useState(null);
   const [isSubmitting, setSubmitting] = useState(false);
   const [charCount, setCharCount]     = useState(0);
-  const [paradoxAlert, setParadoxAlert] = useState(null);
   const [inputMode, setInputMode]     = useState('typed');
   const [permError, setPermError]     = useState(null);
   const [voiceReviewMode, setVoiceReviewMode] = useState(false);
@@ -367,17 +365,7 @@ export default function SlateSection() {
     try {
       const result = await ingestEntry({ text });
 
-      if (result.status === 'insight' || result.status === 'conflict' || result.conflict) {
-        if (wasVoice) {
-          speakFeedback(result.message || 'Pattern detected.');
-        }
-        setParadoxAlert({
-          message: result.message || result.conflict_message || 'A cognitive pattern was detected in your recent entries.',
-          context: result.context || result.historical_context || [],
-          severity: result.status === 'conflict' ? 'warning' : 'info',
-          wasVoice,
-        });
-      } else if (wasVoice) {
+      if (wasVoice) {
         speakFeedback('Your entry is safely recorded.');
       }
 
@@ -691,10 +679,6 @@ export default function SlateSection() {
         <EditModal entry={editModal.entry} onClose={handleModalClose} onUpdated={handleEntryUpdated} />
       )}
 
-      {/* ── Paradox Alert ── */}
-      {paradoxAlert && (
-        <ParadoxAlert alert={paradoxAlert} shouldSpeak={false} onDismiss={() => setParadoxAlert(null)} />
-      )}
     </section>
   );
 }
