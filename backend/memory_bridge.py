@@ -138,9 +138,16 @@ async def recover_memory(req: RecoverRequest):
     
     try:
         # Guard database retrieval with the lock
-        async with cognee_lock:
-            prompt = req.query if req.query else "What choices, habits, or preferences matter most to this user?"
-            context = await cognee.recall(prompt, datasets=[dataset_name])
+        try:
+            async with cognee_lock:
+                prompt = req.query if req.query else "What choices, habits, or preferences matter most to this user?"
+                context = await cognee.recall(prompt, datasets=[dataset_name])
+        except Exception as recall_err:
+            # Catch empty database states / cold starts gracefully
+            if "DatasetNotFoundError" in str(recall_err) or "404" in str(recall_err):
+                context = ""
+            else:
+                raise recall_err
         
         if isinstance(context, list):
             context_str = " ".join([str(item) for item in context])
@@ -207,9 +214,19 @@ async def get_blindspots(profile: str):
     
     try:
         # Guard database retrieval with the lock
-        async with cognee_lock:
-            prompt = "Extract any recurring, indirect correlations where a user choice or lifestyle behavior consistently maps over time to subsequent physical, cognitive, or emotional outcome states."
-            macro_paths = await cognee.recall(prompt, datasets=[dataset_name])
+        try:
+            async with cognee_lock:
+                prompt = "Extract any recurring, indirect correlations where a user choice or lifestyle behavior consistently maps over time to subsequent physical, cognitive, or emotional outcome states."
+                macro_paths = await cognee.recall(prompt, datasets=[dataset_name])
+        except Exception as recall_err:
+            # If the graph is missing or freshly wiped, return a clean empty data array gracefully
+            if "DatasetNotFoundError" in str(recall_err) or "404" in str(recall_err):
+                return {
+                    "status": "success",
+                    "data": []
+                }
+            else:
+                raise recall_err
         
         if isinstance(macro_paths, list):
             macro_paths_str = " ".join([str(item) for item in macro_paths])
@@ -298,7 +315,6 @@ async def forget_memory(req: ForgetConfirmRequest):
         # Guard database operation with the lock
         async with cognee_lock:
             if hasattr(cognee, 'forget'):
-                 # FIXED: Removed the positional text argument to strictly satisfy the keyword-only signature
                  await cognee.forget(dataset_id=dataset_name)
             else:
                  print("Warning: cognee.forget not found. Mocking deletion.")
@@ -317,7 +333,6 @@ async def improve_memory(req: ImproveRequest):
         # Guard database operation with the lock
         async with cognee_lock:
             if hasattr(cognee, 'improve'):
-                # FIXED: Swapped 'dataset_name' to 'dataset_id' to match modern SDK signatures
                 await cognee.improve(
                     dataset_id=dataset_name, 
                     helpful=req.helpful, 
