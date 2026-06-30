@@ -330,14 +330,68 @@ async def forget_memory(req: ForgetConfirmRequest):
 async def improve_memory(req: ImproveRequest):
     dataset_name = f"user_{req.profile}"
     try:
+        system_prompt = (
+            "You are a cognitive routing assistant for a personal graph database. "
+            "Based on the user's feedback (helpful: true/false) to a generated response (context), "
+            "synthesize a single-sentence, high-fidelity behavioral summary describing the user's intent or preference.\n\n"
+            "Rules:\n"
+            "- Scenario A: Recommendation + Helpful (True). Synthesize a high-affinity preference node (e.g., 'User expressed strong interest in checking out the recommendation: Severance').\n"
+            "- Scenario B: Recommendation + Unhelpful (False). Synthesize a negative preference edge or exclusion boundary (e.g., 'User rejected the recommendation of Severance; prioritize alternatives').\n"
+            "- Scenario C: Doubt/Query + Helpful (True). Synthesize a cognitive baseline update (e.g., 'User\\'s understanding cleared regarding Java memory management models').\n"
+            "- Scenario D: Doubt/Query + Unhelpful (False). Log a cognitive friction point (e.g., 'Explanation provided for memory leaks was insufficient or mismatched user context').\n\n"
+            "Output ONLY the single sentence summary, without any extra formatting or conversational text."
+        )
+        
+        user_prompt = f"Helpful Signal: {req.helpful}\nContext (Question & Answer):\n{req.context}"
+
+        llm_response = await acompletion(
+            model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        
+        summary = llm_response.choices[0].message.content.strip()
+
+        # 1. Contextual Signature Matching
+        import hashlib
+        context_hash = hashlib.sha256(req.context.encode('utf-8')).hexdigest()
+
         # Guard database operation with the lock
         async with cognee_lock:
+            manifest_path = f"oracle_manifest_{dataset_name}.json"
+            manifest = {}
+            if os.path.exists(manifest_path):
+                try:
+                    with open(manifest_path, "r") as f:
+                        manifest = json.load(f)
+                except Exception:
+                    pass
+
+            # 2. Idempotent Storage & Graph Overwrite Strategy
+            structural_entry = f"[ORACLE_CTX:{context_hash}] {summary}"
+            
+            if context_hash in manifest:
+                print(f"Idempotent Storage: Overwriting structural text entry for context {context_hash}")
+                # If an exact match is discovered via our localized index map, 
+                # we push the updated structural entry to inherently update the semantic properties.
+                await cognee.remember(structural_entry, dataset_name=dataset_name)
+            else:
+                print(f"Idempotent Storage: Fresh ingest for context {context_hash}")
+                await cognee.remember(structural_entry, dataset_name=dataset_name)
+
+            # Map the footprint locally to prevent duplication leaks
+            manifest[context_hash] = {
+                "helpful": req.helpful,
+                "summary": summary
+            }
+            with open(manifest_path, "w") as f:
+                json.dump(manifest, f)
+
+            # 3. Trigger structural optimization hook smoothly
             if hasattr(cognee, 'improve'):
-                await cognee.improve(
-                    dataset_id=dataset_name, 
-                    helpful=req.helpful, 
-                    context=req.context
-                )
+                await cognee.improve(dataset=dataset_name)
             else:
                 print("Warning: cognee.improve not found. Mocking optimization.")
             

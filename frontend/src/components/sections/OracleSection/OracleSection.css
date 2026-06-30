@@ -377,8 +377,15 @@
 /* ─── DESKTOP LAYOUT TRANSFORMS ───────────────────────────── */
 @media (min-width: 768px) {
   .oracle-section {
+    width: 100%;
+  }
+
+  .oracle-section__header,
+  .oracle-feed > *,
+  .oracle-input-zone > * {
     max-width: 900px;
-    margin: 0 auto;
+    margin-left: auto;
+    margin-right: auto;
     width: 100%;
   }
 
@@ -681,4 +688,85 @@
 .choice-shield__btn-prune:hover {
   color: var(--color-negative);
   background: color-mix(in srgb, var(--color-negative) 10%, transparent);
+}
+
+/* ─── Calibrating Feedback Button State ─── */
+.choice-shield__btn-feedback--inactive {
+  opacity: 0.35;
+  filter: grayscale(0.8);
+}
+
+.choice-shield__btn-feedback--calibrating {
+  animation: feedback-pulse 1.5s infinite;
+  opacity: 0.8;
+}
+
+@keyframes feedback-pulse {
+  0% { box-shadow: 0 0 0 0 var(--color-border); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.feedback-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-text-primary);
+  border-radius: 50%;
+  animation: orb-spin 0.8s linear infinite;
+}
+
+/* ─── Success Indicator / Calibration Morph ─── */
+.choice-shield__success-indicator {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-2);
+  z-index: 10;
+  pointer-events: none;
+  animation: slide-fade-up var(--dur-normal) var(--ease-spring) forwards,
+             fade-out-custom var(--dur-normal) 1.2s forwards;
+}
+
+.choice-shield__success-indicator span {
+  font-family: var(--font-mono);
+  font-size: var(--type-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-primary);
+}
+
+@keyframes slide-fade-up {
+  from { opacity: 0; transform: translate(-50%, -10%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+@keyframes fade-out-custom {
+  to { opacity: 0; }
+}
+
+/* Soft ambient glow on success based on direction */
+.choice-shield--success.choice-shield--up {
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.15), inset 0 0 0 1px rgba(16, 185, 129, 0.3);
+  transition: all var(--dur-slow) var(--ease-out-soft);
+}
+
+.choice-shield--success.choice-shield--down {
+  box-shadow: 0 0 40px rgba(220, 38, 38, 0.15), inset 0 0 0 1px rgba(220, 38, 38, 0.3);
+  transition: all var(--dur-slow) var(--ease-out-soft);
+}
+
+/* ─── Retired State (Post-Success) ─── */
+.choice-shield--retired {
+  opacity: 0.6;
+  transform: scale(0.98);
+  filter: saturate(0.5);
+  box-shadow: none;
+  transition: all var(--dur-slow) var(--ease-out-soft);
 }

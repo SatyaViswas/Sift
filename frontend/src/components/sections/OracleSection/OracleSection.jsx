@@ -141,15 +141,28 @@ export default function OracleSection() {
   }, [query, isThinking, orbState, stopListening, resetTranscript]);
 
   const handleFeedback = useCallback(async (msgId, context, helpful) => {
-    if (feedbackStates[msgId]) return;
-    
-    setFeedbackStates(prev => ({ ...prev, [msgId]: helpful ? 'up' : 'down' }));
+    const newType = helpful ? 'up' : 'down';
+    if (feedbackStates[msgId]?.status === 'calibrating') return;
+    if (feedbackStates[msgId]?.type === newType) return; // Ignore exact same selection
+
+    setFeedbackStates(prev => ({ 
+      ...prev, 
+      [msgId]: { type: newType, status: 'calibrating' } 
+    }));
     
     try {
       await improveMemory({ helpful, context });
+      setFeedbackStates(prev => ({ 
+        ...prev, 
+        [msgId]: { type: newType, status: 'success' } 
+      }));
     } catch (err) {
       console.error('Feedback failed:', err);
-      // Optional: show a small toast error here
+      setFeedbackStates(prev => {
+        const next = { ...prev };
+        delete next[msgId];
+        return next;
+      });
     }
   }, [feedbackStates]);
 
@@ -230,7 +243,12 @@ export default function OracleSection() {
                 
                 {msg.type === 'choice_shield' ? (
                   /* ── Choice Shield Layout ── */
-                  <div className={`choice-shield choice-shield--${msg.data.type || 'general'}`}>
+                  <div className={`choice-shield choice-shield--${msg.data.type || 'general'} ${feedbackStates[msg.id] ? `choice-shield--${feedbackStates[msg.id].status}` : ''} ${feedbackStates[msg.id] ? `choice-shield--${feedbackStates[msg.id].type}` : ''}`}>
+                    {feedbackStates[msg.id]?.status === 'success' && (
+                       <div key={feedbackStates[msg.id].type} className="choice-shield__success-indicator">
+                         <span>Ontology Calibrated</span>
+                       </div>
+                    )}
                     <div className="choice-shield__header">
                       <span className="choice-shield__label">{msg.data.type || 'General'} Insight</span>
                       <h3 className="choice-shield__headline">{msg.data.headline}</h3>
@@ -244,20 +262,20 @@ export default function OracleSection() {
                       <div className="choice-shield__actions">
                         <div className="choice-shield__feedback">
                           <button 
-                            className={`choice-shield__btn-feedback ${feedbackStates[msg.id] === 'up' ? 'choice-shield__btn-feedback--active' : ''}`}
+                            className={`choice-shield__btn-feedback ${feedbackStates[msg.id]?.type === 'up' ? 'choice-shield__btn-feedback--active' : (feedbackStates[msg.id] ? 'choice-shield__btn-feedback--inactive' : '')} ${feedbackStates[msg.id]?.status === 'calibrating' && feedbackStates[msg.id]?.type === 'up' ? 'choice-shield__btn-feedback--calibrating' : ''}`}
                             onClick={() => handleFeedback(msg.id, msg.data.headline, true)}
-                            disabled={!!feedbackStates[msg.id]}
+                            disabled={feedbackStates[msg.id]?.status === 'calibrating'}
                             aria-label="Helpful"
                           >
-                            👍
+                            {feedbackStates[msg.id]?.status === 'calibrating' && feedbackStates[msg.id]?.type === 'up' ? <div className="feedback-spinner" /> : '👍'}
                           </button>
                           <button 
-                            className={`choice-shield__btn-feedback ${feedbackStates[msg.id] === 'down' ? 'choice-shield__btn-feedback--active' : ''}`}
+                            className={`choice-shield__btn-feedback ${feedbackStates[msg.id]?.type === 'down' ? 'choice-shield__btn-feedback--active' : (feedbackStates[msg.id] ? 'choice-shield__btn-feedback--inactive' : '')} ${feedbackStates[msg.id]?.status === 'calibrating' && feedbackStates[msg.id]?.type === 'down' ? 'choice-shield__btn-feedback--calibrating' : ''}`}
                             onClick={() => handleFeedback(msg.id, msg.data.headline, false)}
-                            disabled={!!feedbackStates[msg.id]}
+                            disabled={feedbackStates[msg.id]?.status === 'calibrating'}
                             aria-label="Not helpful"
                           >
-                            👎
+                            {feedbackStates[msg.id]?.status === 'calibrating' && feedbackStates[msg.id]?.type === 'down' ? <div className="feedback-spinner" /> : '👎'}
                           </button>
                         </div>
                         <button 

@@ -393,10 +393,18 @@
 @media (min-width: 768px) {
   .blindspot-section {
     overflow-y: auto;
-    max-width: 1200px;
-    margin: 0 auto;
     width: 100%;
     padding: 0 var(--space-4);
+  }
+
+  .blindspot-section__header,
+  .blindspot-stats,
+  .blindspot-error,
+  .blindspot-feed {
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
   }
 
   .blindspot-section__header {
