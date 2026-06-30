@@ -47,6 +47,16 @@ export async function updateEntry({ entryId, originalText, newText, profile }) {
   return request('PUT', '/api/memory/update', { entryId, originalText, newText }, profile);
 }
 
+/** Phase 7B — Intentional Forgetting: Dissolve a semantic connection */
+export async function forgetMemory({ topic, profile }) {
+  return request('POST', '/api/memory/forget', { topic }, profile);
+}
+
+/** Phase 7B — Oracle Optimization: Reinforce graph weights based on feedback */
+export async function improveMemory({ helpful, context, profile }) {
+  return request('POST', '/api/memory/improve', { helpful, context }, profile);
+}
+
 /** Health check */
 export async function healthCheck() {
   return request('GET', '/api/health');

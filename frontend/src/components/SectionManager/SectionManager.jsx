@@ -3,12 +3,14 @@ import { useNavigation } from '../../context/NavigationContext';
 import SlateSection from '../sections/SlateSection/SlateSection';
 import OracleSection from '../sections/OracleSection/OracleSection';
 import BlindspotSection from '../sections/BlindspotSection/BlindspotSection';
+import HistorySection from '../sections/HistorySection/HistorySection';
 import './SectionManager.css';
 
 const SECTION_MAP = {
   slate:       SlateSection,
   oracle:      OracleSection,
   blindspots:  BlindspotSection,
+  history:     HistorySection,
 };
 
 /**

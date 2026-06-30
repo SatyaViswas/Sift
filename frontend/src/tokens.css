@@ -52,6 +52,12 @@
   --prim-indigo-300:    hsl(245, 80%, 75%);
   --prim-indigo-400:    hsl(245, 70%, 68%);
   --prim-indigo-500:    hsl(245, 60%, 58%);
+
+  /* History accent — Sepia/Parchment */
+  --prim-sepia-200:     hsl(35, 55%, 78%);
+  --prim-sepia-300:     hsl(35, 58%, 65%);
+  --prim-sepia-400:     hsl(35, 60%, 54%);
+  --prim-sepia-500:     hsl(35, 55%, 44%);
 }
 
 /* ─── TIER 2: SEMANTIC TOKENS (Light Mode — default) ──────── */
@@ -86,6 +92,9 @@
   --color-accent-blind-soft:   hsl(350, 70%, 65%, 0.12);
   --color-accent-blind-glow:   hsl(350, 70%, 65%, 0.35);
   --color-accent-processing:   var(--prim-indigo-500);
+  --color-accent-history:      var(--prim-sepia-400);
+  --color-accent-history-soft: hsl(35, 60%, 54%, 0.12);
+  --color-accent-history-glow: hsl(35, 60%, 54%, 0.35);
 
   /* Orb */
   --color-orb-idle:       var(--prim-stone-200);
@@ -94,7 +103,8 @@
   /* Canvas atmospheric gradients per section */
   --canvas-slate:  radial-gradient(ellipse at 50% 40%, hsl(38, 60%, 85%) 0%, hsl(38, 18%, 90%) 70%);
   --canvas-oracle: radial-gradient(ellipse at 50% 40%, hsl(152, 35%, 82%) 0%, hsl(38, 18%, 90%) 70%);
-  --canvas-blind:  radial-gradient(ellipse at 50% 40%, hsl(350, 40%, 85%) 0%, hsl(38, 18%, 90%) 70%);
+  --canvas-blind:   radial-gradient(ellipse at 50% 40%, hsl(350, 40%, 85%) 0%, hsl(38, 18%, 90%) 70%);
+  --canvas-history: radial-gradient(ellipse at 50% 40%, hsl(35, 50%, 88%) 0%, hsl(38, 18%, 90%) 70%);
 
   /* Shadows */
   --shadow-1: 0 1px 3px hsl(220 20% 10% / 0.07), 0 1px 2px hsl(220 20% 10% / 0.05);
@@ -134,13 +144,17 @@
   --color-accent-blind-soft:  hsl(350, 80%, 72%, 0.10);
   --color-accent-blind-glow:  hsl(350, 80%, 72%, 0.30);
   --color-accent-processing:  var(--prim-indigo-300);
+  --color-accent-history:      var(--prim-sepia-300);
+  --color-accent-history-soft: hsl(35, 58%, 65%, 0.10);
+  --color-accent-history-glow: hsl(35, 58%, 65%, 0.30);
 
   --color-orb-idle:       var(--prim-void-700);
   --color-orb-idle-icon:  var(--prim-ghost-400);
 
   --canvas-slate:  radial-gradient(ellipse at 50% 40%, hsl(38, 40%, 14%) 0%, hsl(228, 28%, 7%) 70%);
   --canvas-oracle: radial-gradient(ellipse at 50% 40%, hsl(152, 25%, 13%) 0%, hsl(228, 28%, 7%) 70%);
-  --canvas-blind:  radial-gradient(ellipse at 50% 40%, hsl(350, 30%, 14%) 0%, hsl(228, 28%, 7%) 70%);
+  --canvas-blind:   radial-gradient(ellipse at 50% 40%, hsl(350, 30%, 14%) 0%, hsl(228, 28%, 7%) 70%);
+  --canvas-history: radial-gradient(ellipse at 50% 40%, hsl(35, 35%, 16%) 0%, hsl(228, 28%, 7%) 70%);
 
   --shadow-1: 0 1px 3px hsl(0 0% 0% / 0.20), 0 1px 2px hsl(0 0% 0% / 0.14);
   --shadow-2: 0 4px 12px hsl(0 0% 0% / 0.28), 0 2px 4px hsl(0 0% 0% / 0.18);

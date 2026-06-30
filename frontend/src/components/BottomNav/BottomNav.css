@@ -73,6 +73,9 @@
 .bottom-nav__tab--active[data-tab="blindspots"] {
   color: var(--color-accent-blind);
 }
+.bottom-nav__tab--active[data-tab="history"] {
+  color: var(--color-accent-history);
+}
 
 /* ─── Icon ────────────────────────────────────────────────── */
 .bottom-nav__icon {
@@ -114,6 +117,7 @@
 [data-tab="slate"] .bottom-nav__pip      { background: var(--color-accent-slate); }
 [data-tab="oracle"] .bottom-nav__pip     { background: var(--color-accent-oracle); }
 [data-tab="blindspots"] .bottom-nav__pip { background: var(--color-accent-blind); }
+[data-tab="history"] .bottom-nav__pip    { background: var(--color-accent-history); }
 
 /* ─── Glassmorphism on dark ───────────────────────────────── */
 [data-theme="dark"] .bottom-nav {

@@ -3,6 +3,7 @@ import { ingestEntry, updateEntry } from '../../../utils/api';
 import { useSpeechRecognition } from '../../../hooks/useSpeechRecognition';
 import DailyPrompt from '../../DailyPrompt/DailyPrompt';
 import MicOrb from '../../MicOrb/MicOrb';
+import MemorySafeguardModal from '../../MemorySafeguardModal/MemorySafeguardModal';
 import './SlateSection.css';
 
 /**
@@ -243,6 +244,11 @@ export default function SlateSection() {
   const [inputMode, setInputMode]     = useState('typed');
   const [permError, setPermError]     = useState(null);
   const [voiceReviewMode, setVoiceReviewMode] = useState(false);
+  const [safeguardTopic, setSafeguardTopic]   = useState(null); // For global reset
+  const [safeguardEntry, setSafeguardEntry]   = useState(null); // For contextual deletion
+  
+  // Contextual Deletion Transition State
+  const [fadingId, setFadingId] = useState(null);
 
   const textareaRef  = useRef(null);
   const snippetRef   = useRef(null);
@@ -282,6 +288,27 @@ export default function SlateSection() {
     localStorage.setItem(SLATE_CACHE_KEY, draft);
   }, [draft]);
 
+  const syncFromStorage = useCallback(() => {
+    try {
+      const cached = localStorage.getItem(SLATE_ENTRIES_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.date === new Date().toLocaleDateString()) {
+          setEntries(parsed.entries);
+        }
+      } else {
+        setEntries([]);
+      }
+    } catch (e) {
+      console.error('Failed to sync Slate entries:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('sift_sync', syncFromStorage);
+    return () => window.removeEventListener('sift_sync', syncFromStorage);
+  }, [syncFromStorage]);
+
   useEffect(() => {
     if (entries.length > 0) {
       localStorage.setItem(SLATE_ENTRIES_CACHE_KEY, JSON.stringify({
@@ -289,7 +316,10 @@ export default function SlateSection() {
         entries,
       }));
     } else {
-      localStorage.removeItem(SLATE_ENTRIES_CACHE_KEY);
+      localStorage.setItem(SLATE_ENTRIES_CACHE_KEY, JSON.stringify({
+        date: new Date().toLocaleDateString(),
+        entries: [],
+      }));
     }
   }, [entries]);
 
@@ -365,12 +395,21 @@ export default function SlateSection() {
     try {
       const result = await ingestEntry({ text });
 
+      if (result.status === 'forget_confirmation' && result.data && result.data.topic) {
+        // Intent Interception: User asked to forget something
+        if (wasVoice) speakFeedback('I understand. Please confirm this deletion.');
+        setSafeguardTopic(result.data.topic);
+        // Remove the optimistic entry since it was a command, not a journal entry
+        setEntries(prev => prev.filter(e => e.id !== tempId));
+        return;
+      }
+
       if (wasVoice) {
         speakFeedback('Your entry is safely recorded.');
       }
 
       setEntries(prev =>
-        prev.map(e => e.id === tempId ? { ...e, status: 'saved' } : e)
+        prev.map(e => e.id === tempId ? { ...e, status: 'saved', heading: result.heading } : e)
       );
     } catch (err) {
       console.error('Ingest failed:', err);
@@ -410,6 +449,10 @@ export default function SlateSection() {
     setEntries(prev =>
       prev.map(e => e.id === id ? { ...e, text: newText } : e)
     );
+  }, []);
+
+  const handleEntryDelete = useCallback((entry) => {
+    setSafeguardEntry(entry);
   }, []);
 
   const formatTime = (iso) =>
@@ -611,39 +654,66 @@ export default function SlateSection() {
               Today · {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
             </p>
             {entries.map(entry => (
-              <button
+              <article
                 key={entry.id}
-                className={`slate-entry slate-entry--${entry.status} ${entry.isSnippet ? 'slate-entry--snippet' : ''}`}
-                aria-label={`Journal entry at ${formatTime(entry.timestamp)}${entry.status === 'saved' ? '. Click to edit.' : ''}`}
-                onClick={() => handleEntryClick(entry)}
-                disabled={entry.status !== 'saved'}
-                type="button"
+                className={`slate-entry slate-entry--${entry.status} ${entry.isSnippet ? 'slate-entry--snippet' : ''} ${fadingId === entry.id ? 'slate-entry--fading' : ''}`}
               >
-                <div className="slate-entry__meta">
-                  <div className="slate-entry__meta-left">
-                    <time className="slate-entry__time" dateTime={entry.timestamp}>{formatTime(entry.timestamp)}</time>
-                    <span className="slate-entry__type-badge" aria-hidden="true">{entry.isSnippet ? '⚡ snippet' : '📖 deep'}</span>
+                <button
+                  className="slate-entry__body-btn"
+                  aria-label={`Journal entry at ${formatTime(entry.timestamp)}${entry.status === 'saved' ? '. Click to edit.' : ''}`}
+                  onClick={() => handleEntryClick(entry)}
+                  disabled={entry.status !== 'saved'}
+                  type="button"
+                >
+                  <div className="slate-entry__meta">
+                    <div className="slate-entry__meta-left">
+                      <time className="slate-entry__time" dateTime={entry.timestamp}>{formatTime(entry.timestamp)}</time>
+                      <span className="slate-entry__type-badge" aria-hidden="true">{entry.isSnippet ? '⚡ snippet' : '📖 deep'}</span>
+                    </div>
+                    <div className="slate-entry__badges">
+                      {entry.isVoice && <span className="slate-entry__voice-badge" aria-label="Voice entry">🎙</span>}
+                      <span className={`slate-entry__status-badge slate-entry__status-badge--${entry.status}`}>
+                        {entry.status === 'pending' && '●'}
+                        {entry.status === 'saved'   && '✓'}
+                        {entry.status === 'error'   && '✕'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="slate-entry__badges">
-                    {entry.isVoice && <span className="slate-entry__voice-badge" aria-label="Voice entry">🎙</span>}
-                    <span className={`slate-entry__status-badge slate-entry__status-badge--${entry.status}`}>
-                      {entry.status === 'pending' && '●'}
-                      {entry.status === 'saved'   && '✓'}
-                      {entry.status === 'error'   && '✕'}
-                    </span>
-                  </div>
-                </div>
-                <p className="slate-entry__text">{entry.text}</p>
+                  {entry.heading ? (
+                    <>
+                      <h3 className="slate-entry__heading">{entry.heading}</h3>
+                      <p className="slate-entry__text slate-entry__text--clamped">{entry.text}</p>
+                    </>
+                  ) : (
+                    <p className="slate-entry__text">{entry.text}</p>
+                  )}
+                  {entry.status === 'saved' && (
+                    <div className="slate-entry__edit-hint" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" width="11" height="11">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                      </svg>
+                      tap to edit
+                    </div>
+                  )}
+                </button>
                 {entry.status === 'saved' && (
-                  <div className="slate-entry__edit-hint" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" width="11" height="11">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                  <button
+                    className="slate-entry__delete-btn"
+                    onClick={() => handleEntryDelete(entry)}
+                    aria-label="Dissolve this memory entry"
+                    type="button"
+                    title="Dissolve memory"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" width="12" height="12" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                      <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                      <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                      <path d="M9 6V4h6v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
                     </svg>
-                    tap to edit
-                  </div>
+                  </button>
                 )}
-              </button>
+              </article>
             ))}
           </>
         )}
@@ -677,6 +747,47 @@ export default function SlateSection() {
       {/* ── Edit Modal ── */}
       {editModal && (
         <EditModal entry={editModal.entry} onClose={handleModalClose} onUpdated={handleEntryUpdated} />
+      )}
+
+      {/* ── Safeguard Modal ── */}
+      {(safeguardTopic || safeguardEntry) && (
+        <MemorySafeguardModal 
+          topic={safeguardTopic || (safeguardEntry ? (safeguardEntry.heading || safeguardEntry.text) : '')} 
+          onClose={() => {
+            setSafeguardTopic(null);
+            setSafeguardEntry(null);
+          }} 
+          onForgotten={() => {
+            if (safeguardEntry) {
+              const idToRemove = safeguardEntry.id;
+              
+              // Immediate sync to avoid unmount race conditions
+              const nextEntries = entries.filter(e => e.id !== idToRemove);
+              localStorage.setItem(SLATE_ENTRIES_CACHE_KEY, JSON.stringify({
+                date: new Date().toLocaleDateString(),
+                entries: nextEntries,
+              }));
+              window.dispatchEvent(new Event('sift_sync'));
+
+              setSafeguardEntry(null);
+              setFadingId(idToRemove);
+              
+              setTimeout(() => {
+                setEntries(prev => prev.filter(e => e.id !== idToRemove));
+                setFadingId(null);
+              }, 400);
+            } else {
+              localStorage.setItem(SLATE_ENTRIES_CACHE_KEY, JSON.stringify({
+                date: new Date().toLocaleDateString(),
+                entries: [],
+              }));
+              window.dispatchEvent(new Event('sift_sync'));
+
+              setEntries([]);
+              setSafeguardTopic(null);
+            }
+          }} 
+        />
       )}
 
     </section>

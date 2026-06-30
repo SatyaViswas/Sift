@@ -1,0 +1,1437 @@
+/* ============================================================
+   HistorySection — The Archives
+   Skeuomorphic journal book aesthetic.
+
+   Light mode : cream linen paper · warm charcoal ink
+   Dark mode  : obsidian-leather binding · deep charcoal pages
+                · soft luminescent sepia accents
+
+   Three concern areas addressed here:
+     1. Paper immersion — texture, warm ink colours, generous
+        leading, margin gutter, corner-fold anatomy
+     2. Page-flip transitions — hardware-accelerated 3D on date
+        change; organic mount-unfold on initial render
+     3. Dark-mode desktop spread — full audit of every token
+        that bleeds or clips on widescreen dark layouts
+   ============================================================ */
+
+/* ══════════════════════════════════════════════════════════════
+   KEYFRAMES
+   ══════════════════════════════════════════════════════════════ */
+
+/* Initial book-open (mount) — each page swings out from spine */
+@keyframes page-unfold-left {
+  from {
+    transform: perspective(1400px) rotateY(52deg) scaleX(0.72);
+    opacity: 0;
+    filter: brightness(0.88);
+  }
+  60% {
+    filter: brightness(1.02);
+  }
+  to {
+    transform: perspective(1400px) rotateY(0deg) scaleX(1);
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+@keyframes page-unfold-right {
+  from {
+    transform: perspective(1400px) rotateY(-52deg) scaleX(0.72);
+    opacity: 0;
+    filter: brightness(0.88);
+  }
+  60% {
+    filter: brightness(1.02);
+  }
+  to {
+    transform: perspective(1400px) rotateY(0deg) scaleX(1);
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+/* Page-flip-forward: left page sweeps right (like turning forward) */
+@keyframes flip-out-forward {
+  from {
+    transform: perspective(1400px) rotateY(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: perspective(1400px) rotateY(-30deg) scaleX(0.88);
+    opacity: 0;
+  }
+}
+
+@keyframes flip-in-forward {
+  from {
+    transform: perspective(1400px) rotateY(30deg) scaleX(0.88);
+    opacity: 0;
+  }
+  to {
+    transform: perspective(1400px) rotateY(0deg) scaleX(1);
+    opacity: 1;
+  }
+}
+
+/* Page-flip-backward: pages swing in from the right */
+@keyframes flip-out-backward {
+  from {
+    transform: perspective(1400px) rotateY(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: perspective(1400px) rotateY(30deg) scaleX(0.88);
+    opacity: 0;
+  }
+}
+
+@keyframes flip-in-backward {
+  from {
+    transform: perspective(1400px) rotateY(-30deg) scaleX(0.88);
+    opacity: 0;
+  }
+  to {
+    transform: perspective(1400px) rotateY(0deg) scaleX(1);
+    opacity: 1;
+  }
+}
+
+/* Mobile page flip — lateral slide, lighter than 3D */
+@keyframes mobile-flip-out-forward {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(-18px); opacity: 0; }
+}
+
+@keyframes mobile-flip-in-forward {
+  from { transform: translateX(18px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes mobile-flip-out-backward {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(18px); opacity: 0; }
+}
+
+@keyframes mobile-flip-in-backward {
+  from { transform: translateX(-18px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+/* Soft entry fade for individual cards */
+@keyframes entry-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Ink drop — action buttons */
+@keyframes ink-drop {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   SECTION SHELL
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5) var(--space-16);
+  min-height: 100%;
+  overflow-x: hidden;
+  /* Warm atmospheric haze behind the paper */
+  background:
+    radial-gradient(
+      ellipse at 20% 0%,
+      hsl(38 55% 90% / 0.55) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse at 85% 80%,
+      hsl(35 45% 88% / 0.35) 0%,
+      transparent 55%
+    );
+}
+
+[data-theme="dark"] .hist-section {
+  background:
+    radial-gradient(
+      ellipse at 20% 0%,
+      hsl(35 30% 14% / 0.6) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse at 85% 80%,
+      hsl(228 28% 10% / 0.8) 0%,
+      transparent 55%
+    );
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   SECTION HEADER
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-section__header {
+  position: relative;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  animation: fade-in var(--dur-slow) var(--ease-out-soft) both;
+}
+
+.hist-section__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.4rem);
+  font-weight: 300;
+  letter-spacing: -0.045em;
+  color: var(--color-text-primary);
+  line-height: 1.05;
+}
+
+.hist-section__subtitle {
+  font-size: var(--type-sm);
+  color: var(--color-accent-history);
+  font-weight: 500;
+  margin-top: var(--space-2);
+  letter-spacing: 0.015em;
+  font-style: italic;
+  opacity: 0.9;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   MONTH TRIGGER & POPOVER
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-section__header-right {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.hist-month-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-history-soft);
+  border: 1px solid hsl(35 60% 54% / 0.22);
+  color: var(--color-accent-history);
+  font-size: var(--type-sm);
+  font-weight: 600;
+  font-family: var(--font-body);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    background  var(--dur-fast) var(--ease-out-soft),
+    transform   var(--dur-fast) var(--ease-spring),
+    box-shadow  var(--dur-fast) var(--ease-out-soft),
+    border-color var(--dur-fast);
+  white-space: nowrap;
+}
+
+.hist-month-trigger:hover {
+  background: hsl(35 60% 54% / 0.18);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px hsl(35 60% 54% / 0.18);
+  border-color: hsl(35 60% 54% / 0.38);
+}
+
+.hist-month-trigger--open {
+  background: hsl(35 60% 54% / 0.18);
+  border-color: hsl(35 60% 54% / 0.40);
+}
+
+.hist-month-trigger:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* ── Month Popover ── */
+.hist-month-popover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  width: 288px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 8px 32px hsl(0 0% 0% / 0.14),
+    0 2px 8px  hsl(0 0% 0% / 0.08),
+    0 0 0 1px hsl(35 60% 54% / 0.10);
+  z-index: 300;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  animation: fade-in 180ms var(--ease-out-soft) both;
+  transform-origin: top right;
+}
+
+[data-theme="dark"] .hist-month-popover {
+  background: hsl(228 24% 13%);
+  border-color: hsl(228 18% 24%);
+  box-shadow:
+    0 8px 32px hsl(0 0% 0% / 0.55),
+    0 2px 8px  hsl(0 0% 0% / 0.35),
+    0 0 0 1px hsl(35 58% 65% / 0.08);
+}
+
+.hist-month-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.hist-month-popover__title {
+  font-size: var(--type-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.hist-month-popover__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  transition:
+    background var(--dur-fast),
+    color var(--dur-fast),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+.hist-month-popover__arrow:hover {
+  background: var(--color-accent-history-soft);
+  color: var(--color-accent-history);
+  transform: scale(1.08);
+  border-color: hsl(35 60% 54% / 0.28);
+}
+
+.hist-month-popover__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.hist-month-popover__dayname {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-muted);
+}
+
+.hist-month-popover__empty {
+  display: block;
+  height: 32px;
+}
+
+.hist-month-popover__day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  font-size: var(--type-xs);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    background var(--dur-fast),
+    color var(--dur-fast),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+.hist-month-popover__day:hover:not(:disabled) {
+  background: var(--color-accent-history-soft);
+  color: var(--color-accent-history);
+  transform: scale(1.1);
+}
+
+.hist-month-popover__day--today {
+  color: var(--color-accent-history);
+  font-weight: 700;
+}
+
+.hist-month-popover__day--active {
+  background: var(--color-accent-history);
+  color: hsl(40 30% 98%);
+  font-weight: 700;
+}
+
+.hist-month-popover__day--active:hover {
+  background: var(--prim-sepia-500);
+  color: hsl(40 30% 98%);
+}
+
+.hist-month-popover__day--future,
+.hist-month-popover__day:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   WEEK CALENDAR STRIP
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-week-cal {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  animation: fade-in var(--dur-slow) var(--ease-out-soft) 55ms both;
+}
+
+.hist-week-cal__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  flex-shrink: 0;
+  transition:
+    background  var(--dur-fast) var(--ease-out-soft),
+    color       var(--dur-fast) var(--ease-out-soft),
+    transform   var(--dur-fast) var(--ease-spring),
+    border-color var(--dur-fast);
+}
+
+.hist-week-cal__arrow:hover {
+  background: var(--color-accent-history-soft);
+  color: var(--color-accent-history);
+  transform: scale(1.08);
+  border-color: hsl(35 60% 54% / 0.28);
+}
+
+.hist-week-cal__arrow:active {
+  transform: scale(0.94);
+}
+
+.hist-week-cal__strip {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  flex: 1;
+  padding: var(--space-1) 0;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.hist-week-cal__strip::-webkit-scrollbar {
+  display: none;
+}
+
+.hist-cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 46px;
+  height: 62px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--color-text-muted);
+  scroll-snap-align: center;
+  flex-shrink: 0;
+  position: relative;
+  transition:
+    background    var(--dur-fast) var(--ease-out-soft),
+    color         var(--dur-fast) var(--ease-out-soft),
+    border-color  var(--dur-fast) var(--ease-out-soft),
+    transform     var(--dur-fast) var(--ease-spring),
+    box-shadow    var(--dur-fast) var(--ease-out-soft);
+}
+
+.hist-cal-day:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+  transform: translateY(-2px);
+}
+
+.hist-cal-day__weekday {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  line-height: 1;
+}
+
+.hist-cal-day__num {
+  font-size: var(--type-md);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.hist-cal-day__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent-history);
+  position: absolute;
+  bottom: 7px;
+  box-shadow: 0 0 4px var(--color-accent-history-glow);
+}
+
+/* Today */
+.hist-cal-day--today:not(.hist-cal-day--active) {
+  border-color: hsl(35 60% 54% / 0.22);
+}
+
+.hist-cal-day--today .hist-cal-day__num {
+  color: var(--color-accent-history);
+  font-weight: 700;
+}
+
+/* Active / selected day */
+.hist-cal-day--active {
+  background: var(--color-accent-history-soft);
+  border-color: hsl(35 60% 54% / 0.40);
+  color: var(--color-accent-history);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px hsl(35 60% 54% / 0.22);
+}
+
+.hist-cal-day--active .hist-cal-day__num {
+  font-weight: 700;
+}
+
+.hist-cal-day--active:hover:not(:disabled) {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 22px hsl(35 60% 54% / 0.28);
+}
+
+/* Future dates */
+.hist-cal-day--future {
+  opacity: 0.30;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE SUB-TAB SWITCHER
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-mobile-tabs {
+  display: flex;
+  gap: var(--space-1);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-1);
+  animation: fade-in var(--dur-slow) var(--ease-out-soft) 80ms both;
+}
+
+.hist-mobile-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--type-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  transition:
+    background var(--dur-normal) var(--ease-out-soft),
+    color      var(--dur-normal) var(--ease-out-soft),
+    transform  var(--dur-fast)   var(--ease-spring);
+  text-align: center;
+}
+
+.hist-mobile-tab:active {
+  transform: scale(0.96);
+}
+
+.hist-mobile-tab--active {
+  background: var(--color-accent-history-soft);
+  color: var(--color-accent-history);
+  font-weight: 600;
+  box-shadow: 0 2px 8px hsl(35 60% 54% / 0.14);
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   BOOK SPREAD — DESKTOP
+   ══════════════════════════════════════════════════════════════ */
+
+/* Mobile: book hidden */
+.hist-book { display: none; }
+.hist-mobile-tabs { display: flex; }
+.hist-mobile-page { display: flex; }
+
+/* ── Desktop: show the open book ─────────────────────────────── */
+@media (min-width: 768px) {
+  .hist-mobile-tabs { display: none; }
+  .hist-mobile-page { display: none; }
+
+  .hist-book {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    /* Clip overflow so 3D rotations don't spill out of the spread area */
+    overflow: hidden;
+    border-radius: var(--radius-xl);
+    min-height: 540px;
+    /*
+      Outer book-cover shadow — deep double shadow gives the spread
+      genuine elevation on both light and dark backgrounds.
+    */
+    box-shadow:
+      0 4px 16px  hsl(220 20% 10% / 0.10),
+      0 16px 48px hsl(220 20% 10% / 0.12),
+      0 40px 80px hsl(220 20% 10% / 0.08);
+    animation: fade-in var(--dur-slow) var(--ease-out-soft) 90ms both;
+  }
+
+  [data-theme="dark"] .hist-book {
+    box-shadow:
+      0 4px 16px  hsl(0 0% 0% / 0.45),
+      0 16px 48px hsl(0 0% 0% / 0.55),
+      0 40px 80px hsl(0 0% 0% / 0.35);
+  }
+
+  /* ── Initial mount unfold ── */
+  .hist-book--open .hist-book__page--left {
+    animation: page-unfold-left 680ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+  }
+
+  .hist-book--open .hist-book__page--right {
+    animation: page-unfold-right 680ms cubic-bezier(0.22, 1, 0.36, 1) 150ms both;
+  }
+
+  /* ── Date-change flip animations ── */
+  .hist-book--flip-forward .hist-book__page--left,
+  .hist-book--flip-forward .hist-book__page--right {
+    animation: flip-out-forward 200ms cubic-bezier(0.64, 0, 0.78, 0) both;
+  }
+
+  .hist-book--flip-backward .hist-book__page--left,
+  .hist-book--flip-backward .hist-book__page--right {
+    animation: flip-out-backward 200ms cubic-bezier(0.64, 0, 0.78, 0) both;
+  }
+
+  /* After date swap — flip-in state (no flipping class = resting) */
+  .hist-book:not(.hist-book--flip-forward):not(.hist-book--flip-backward)
+  .hist-book__page--left {
+    animation: flip-in-forward 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .hist-book:not(.hist-book--flip-forward):not(.hist-book--flip-backward)
+  .hist-book__page--right {
+    animation: flip-in-forward 240ms cubic-bezier(0.22, 1, 0.36, 1) 40ms both;
+  }
+
+  /* ── Page layout ── */
+  .hist-book__page {
+    flex: 1;
+    min-width: 0;
+    /* Do not clip — we want entries to scroll, not overflow the page */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hist-book__page--left {
+    border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+  }
+
+  .hist-book__page--right {
+    border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+  }
+}
+
+@media (min-width: 1200px) {
+  .hist-book {
+    min-height: 640px;
+  }
+
+  .hist-section {
+    padding: var(--space-8) var(--space-10) var(--space-16);
+    max-width: 1400px;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   BOOK SPINE
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-book__spine {
+  /* Exact width of the binding strip */
+  width: 22px;
+  min-width: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  z-index: 2;
+
+  /* Light: warm parchment spine */
+  background: linear-gradient(
+    to right,
+    hsl(35 45% 88%),
+    hsl(35 38% 85%),
+    hsl(35 45% 88%)
+  );
+  border-left:  1px solid hsl(38 20% 78%);
+  border-right: 1px solid hsl(38 20% 78%);
+  box-shadow:
+    inset 2px 0 4px hsl(38 20% 70% / 0.35),
+    inset -2px 0 4px hsl(38 20% 70% / 0.35);
+}
+
+[data-theme="dark"] .hist-book__spine {
+  background: linear-gradient(
+    to right,
+    hsl(228 22% 16%),
+    hsl(228 20% 14%),
+    hsl(228 22% 16%)
+  );
+  border-left-color:  hsl(228 18% 22%);
+  border-right-color: hsl(228 18% 22%);
+  box-shadow:
+    inset 2px 0 5px hsl(0 0% 0% / 0.3),
+    inset -2px 0 5px hsl(0 0% 0% / 0.3),
+    0 0 0 1px hsl(35 58% 65% / 0.06);
+}
+
+/* Repeating stitching lines on the spine */
+.hist-book__spine::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent   0px,
+    transparent   9px,
+    hsl(35 40% 72% / 0.35) 9px,
+    hsl(35 40% 72% / 0.35) 10px
+  );
+}
+
+[data-theme="dark"] .hist-book__spine::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent  0px,
+    transparent  9px,
+    hsl(35 30% 50% / 0.14) 9px,
+    hsl(35 30% 50% / 0.14) 10px
+  );
+}
+
+.hist-book__spine-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-accent-history);
+  opacity: 0.55;
+  user-select: none;
+  font-family: var(--font-mono);
+  position: relative;
+  z-index: 1;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   JOURNAL PAGE (paper surface)
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-page {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /*
+    No border-radius here — the book container handles clipping.
+    This prevents the ugly seam that appeared in dark mode when
+    the page border-radius leaked past the container clip.
+  */
+  overflow: hidden;
+
+  /* ── Light mode: heavy-weight cream linen ── */
+  background-color: hsl(40 28% 97%);
+  /*
+    Layered backgrounds:
+      1. Subtle diagonal-grain noise (SVG, 4×4 tile)
+      2. Soft warm vignette at page edges
+  */
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='none'/%3E%3Crect x='0' y='0' width='1' height='1' fill='rgba(165,140,95,0.07)'/%3E%3Crect x='2' y='1' width='1' height='1' fill='rgba(165,140,95,0.04)'/%3E%3Crect x='1' y='3' width='1' height='1' fill='rgba(165,140,95,0.05)'/%3E%3Crect x='3' y='2' width='1' height='1' fill='rgba(165,140,95,0.03)'/%3E%3C/svg%3E"),
+    linear-gradient(
+      to bottom,
+      hsl(40 22% 95%) 0%,
+      hsl(40 28% 97%) 6%,
+      hsl(40 28% 97%) 92%,
+      hsl(40 20% 93%) 100%
+    );
+}
+
+.hist-page--right-tint {
+  /* Right-hand page is ever-so-slightly cooler/whiter */
+  background-color: hsl(42 22% 96%);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='none'/%3E%3Crect x='0' y='0' width='1' height='1' fill='rgba(165,140,95,0.05)'/%3E%3Crect x='2' y='1' width='1' height='1' fill='rgba(165,140,95,0.03)'/%3E%3Crect x='1' y='3' width='1' height='1' fill='rgba(165,140,95,0.04)'/%3E%3Crect x='3' y='2' width='1' height='1' fill='rgba(165,140,95,0.025)'/%3E%3C/svg%3E"),
+    linear-gradient(
+      to bottom,
+      hsl(42 18% 94%) 0%,
+      hsl(42 22% 96%) 6%,
+      hsl(42 22% 96%) 92%,
+      hsl(42 16% 92%) 100%
+    );
+}
+
+/* ── Dark mode: obsidian charcoal page ── */
+[data-theme="dark"] .hist-page {
+  background-color: hsl(228 20% 12%);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='none'/%3E%3Crect x='0' y='0' width='1' height='1' fill='rgba(255,255,255,0.022)'/%3E%3Crect x='2' y='1' width='1' height='1' fill='rgba(255,255,255,0.014)'/%3E%3Crect x='1' y='3' width='1' height='1' fill='rgba(255,255,255,0.018)'/%3E%3Crect x='3' y='2' width='1' height='1' fill='rgba(255,255,255,0.010)'/%3E%3C/svg%3E"),
+    linear-gradient(
+      to bottom,
+      hsl(228 22% 11%) 0%,
+      hsl(228 20% 12%) 6%,
+      hsl(228 20% 12%) 92%,
+      hsl(228 22% 10%) 100%
+    );
+}
+
+[data-theme="dark"] .hist-page--right-tint {
+  background-color: hsl(228 18% 11%);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='none'/%3E%3Crect x='0' y='0' width='1' height='1' fill='rgba(255,255,255,0.016)'/%3E%3Crect x='2' y='1' width='1' height='1' fill='rgba(255,255,255,0.010)'/%3E%3Crect x='1' y='3' width='1' height='1' fill='rgba(255,255,255,0.013)'/%3E%3Crect x='3' y='2' width='1' height='1' fill='rgba(255,255,255,0.008)'/%3E%3C/svg%3E"),
+    linear-gradient(
+      to bottom,
+      hsl(228 20% 10%) 0%,
+      hsl(228 18% 11%) 6%,
+      hsl(228 18% 11%) 92%,
+      hsl(228 20% 9%) 100%
+    );
+}
+
+/* ── Vertical margin rule — left gutter red-line equivalent ── */
+.hist-page__margin {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 52px;
+  width: 1px;
+  background: hsl(5 70% 62% / 0.18);
+  pointer-events: none;
+  z-index: 1;
+}
+
+[data-theme="dark"] .hist-page__margin {
+  background: hsl(5 60% 55% / 0.12);
+}
+
+/* ── Horizontal ruling lines ── */
+.hist-page__rules {
+  position: absolute;
+  /* Start below the header — using a fixed pixel offset rather than
+     a CSS variable so it never misaligns as header height varies */
+  top: 64px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  /* 32px line-height matches our body text rhythm */
+  gap: 32px;
+  padding: 8px var(--space-5) 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hist-page__rule-line {
+  height: 1px;
+  flex-shrink: 0;
+  /* Light: barely-there warm grey ruling */
+  background: hsl(38 18% 80% / 0.55);
+}
+
+[data-theme="dark"] .hist-page__rule-line {
+  /* Dark: deep navy ruling — softer than a hard border */
+  background: hsl(228 18% 22% / 0.60);
+}
+
+/* ── Page header band ── */
+.hist-page__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  border-bottom: 1.5px solid hsl(38 18% 82%);
+  z-index: 2;
+
+  /* A very subtle top-of-page gradient to mimic paper heading */
+  background: linear-gradient(
+    180deg,
+    hsl(40 24% 95%) 0%,
+    hsl(40 28% 97%) 100%
+  );
+}
+
+[data-theme="dark"] .hist-page__header {
+  border-bottom-color: hsl(228 18% 20%);
+  background: linear-gradient(
+    180deg,
+    hsl(228 22% 13%) 0%,
+    hsl(228 20% 12%) 100%
+  );
+}
+
+.hist-page__title {
+  font-family: var(--font-display);
+  font-size: var(--type-base);
+  font-weight: 400;
+  font-style: italic;
+  color: var(--color-accent-history);
+  letter-spacing: 0.015em;
+  line-height: 1;
+  flex: 1;
+  opacity: 0.85;
+}
+
+/* ── Corner fold ── */
+.hist-page__corner-fold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 32px;
+  height: 32px;
+  /* Two-triangle fold effect: the first triangle is the folded corner,
+     the second is a shadow cast by the fold */
+  background:
+    linear-gradient(
+      225deg,
+      hsl(38 22% 90%) 0%,
+      hsl(38 22% 90%) 44%,
+      hsl(38 16% 82%) 44%,
+      hsl(38 16% 82%) 50%,
+      transparent 50%
+    );
+  pointer-events: none;
+}
+
+[data-theme="dark"] .hist-page__corner-fold {
+  background:
+    linear-gradient(
+      225deg,
+      hsl(228 22% 15%) 0%,
+      hsl(228 22% 15%) 44%,
+      hsl(228 18% 10%) 44%,
+      hsl(228 18% 10%) 50%,
+      transparent 50%
+    );
+}
+
+/* ── Page body (scrollable content area) ── */
+.hist-page__body {
+  flex: 1;
+  /* 60px left pad = margin rule (52px) + readable clearance;
+     generous right pad for reading comfort */
+  padding: var(--space-4) var(--space-6) var(--space-8) 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 0; /* entries manage their own spacing via padding */
+  position: relative;
+  z-index: 2;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ── Empty state ── */
+.hist-page__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 240px;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+}
+
+.hist-page__empty-icon {
+  font-size: 1.5rem;
+  color: var(--color-accent-history);
+  opacity: 0.30;
+  line-height: 1;
+  margin-bottom: var(--space-1);
+}
+
+.hist-page__empty-text {
+  font-family: var(--font-display);
+  font-size: var(--type-base);
+  font-style: italic;
+  color: var(--color-text-muted);
+  opacity: 0.55;
+  margin: 0;
+}
+
+.hist-page__empty-sub {
+  font-size: var(--type-xs);
+  color: var(--color-text-muted);
+  opacity: 0.40;
+  line-height: 1.6;
+  max-width: 200px;
+  margin: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   ENTRY CARD — the ink on the page
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Generous vertical padding maintains the diary rhythm */
+  padding: var(--space-4) var(--space-4) var(--space-4) 0;
+  border-bottom: 1px solid hsl(38 18% 84% / 0.7);
+  background: transparent;
+  cursor: default;
+  text-align: left;
+  width: 100%;
+  transition:
+    background  var(--dur-fast) var(--ease-out-soft),
+    transform   var(--dur-fast) var(--ease-spring);
+  animation: entry-rise var(--dur-normal) var(--ease-out-soft) both;
+}
+
+.hist-entry--snippet {
+  border-left-style: dashed;
+}
+
+.hist-entry--deleting {
+  opacity: 0.7;
+  pointer-events: none;
+  filter: saturate(0.5);
+}
+
+.hist-entry--fading {
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.4s var(--ease-out-soft), transform 0.4s var(--ease-out-soft);
+}
+
+.hist-entry:last-child {
+  border-bottom: none;
+}
+
+[data-theme="dark"] .hist-entry {
+  border-bottom-color: hsl(228 18% 20% / 0.7);
+}
+
+.hist-entry--hovered {
+  background: hsl(38 22% 95% / 0.65);
+  transform: translateX(3px);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+[data-theme="dark"] .hist-entry--hovered {
+  background: hsl(228 20% 16% / 0.55);
+}
+
+/* Coloured left bar per type — reveals on hover */
+.hist-entry::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 16px;
+  bottom: 16px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out-soft);
+}
+
+.hist-entry--deep::before    { background: var(--color-accent-history); }
+.hist-entry--snippet::before { background: var(--prim-sepia-200); }
+
+.hist-entry--hovered::before { opacity: 1; }
+
+/* ── Gutter: timestamp + type badge ── */
+.hist-entry__gutter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.hist-entry__type-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.hist-entry__type-pip--deep    { background: var(--color-accent-history); }
+.hist-entry__type-pip--snippet { background: var(--prim-sepia-200); box-shadow: 0 0 4px var(--color-accent-history-glow); }
+
+.hist-entry__time {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+  opacity: 0.75;
+}
+
+.hist-entry__badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: hsl(38 15% 88% / 0.8);
+  border: 1px solid hsl(38 15% 80% / 0.6);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  opacity: 0.7;
+}
+
+[data-theme="dark"] .hist-entry__badge {
+  background: hsl(228 18% 20% / 0.7);
+  border-color: hsl(228 18% 26% / 0.5);
+}
+
+/* ── The entry text — main ink ── */
+.hist-entry__text {
+  font-size: var(--type-base);        /* 1rem = 16px — comfortable diary reading size */
+  line-height: 1.85;                  /* generous leading evokes pen on heavy paper */
+  /* Warm charcoal ink — not pure black, has a slight warm-cool blue-brown cast */
+  color: hsl(220 18% 20%);
+  font-family: var(--font-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+  letter-spacing: 0.01em;
+  font-weight: 400;
+  margin: 0;
+}
+
+[data-theme="dark"] .hist-entry__text {
+  /* Dark: luminescent near-white with a warm ghost quality */
+  color: hsl(35 8% 80%);
+}
+
+/* ── Hover-reveal action buttons ── */
+.hist-entry__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  opacity: 0;
+  transform: translateY(5px);
+  pointer-events: none;
+  transition:
+    opacity   150ms var(--ease-out-soft),
+    transform 150ms var(--ease-out-soft);
+}
+
+.hist-entry__actions--visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+  animation: ink-drop 160ms var(--ease-out-soft) both;
+}
+
+.hist-entry__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  border: 1px solid;
+  cursor: pointer;
+  transition:
+    background  var(--dur-fast) var(--ease-out-soft),
+    transform   var(--dur-fast) var(--ease-spring);
+}
+
+.hist-entry__btn:active {
+  transform: scale(0.94);
+}
+
+.hist-entry__btn--edit {
+  background: var(--color-accent-history-soft);
+  color: var(--color-accent-history);
+  border-color: hsl(35 60% 54% / 0.28);
+}
+
+.hist-entry__btn--edit:hover {
+  background: hsl(35 60% 54% / 0.20);
+  border-color: hsl(35 60% 54% / 0.42);
+}
+
+.hist-entry__btn--delete {
+  background: hsl(350 70% 65% / 0.07);
+  color: var(--color-accent-blind);
+  border-color: hsl(350 70% 65% / 0.20);
+}
+
+.hist-entry__btn--delete:hover {
+  background: hsl(350 70% 65% / 0.14);
+  border-color: hsl(350 70% 65% / 0.35);
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   INLINE EDITOR (on the paper surface)
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-inline-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1.5px solid hsl(35 60% 54% / 0.38);
+  /* Editor sits slightly above the paper surface */
+  background: hsl(40 30% 99%);
+  box-shadow:
+    0 0 0 4px hsl(35 60% 54% / 0.07),
+    0 4px 20px hsl(35 60% 54% / 0.14),
+    var(--shadow-2);
+  animation: fade-in var(--dur-normal) var(--ease-out-soft) both;
+  margin: var(--space-1) 0 var(--space-3);
+}
+
+[data-theme="dark"] .hist-inline-editor {
+  background: hsl(228 22% 14%);
+  border-color: hsl(35 58% 65% / 0.28);
+  box-shadow:
+    0 0 0 4px hsl(35 58% 65% / 0.06),
+    0 4px 20px hsl(0 0% 0% / 0.35),
+    var(--shadow-3);
+}
+
+.hist-inline-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hist-inline-editor__label {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--color-accent-history);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.hist-inline-editor__close {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.hist-inline-editor__close:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.hist-inline-editor__textarea {
+  width: 100%;
+  min-height: 80px;
+  max-height: 280px;
+  resize: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-body);
+  font-size: var(--type-base);
+  line-height: 1.85;
+  color: var(--color-text-primary);
+  background: var(--color-bg-input);
+  outline: none;
+  overflow-y: hidden;
+  transition:
+    border-color var(--dur-fast) var(--ease-out-soft),
+    box-shadow   var(--dur-fast);
+}
+
+.hist-inline-editor__textarea:focus {
+  border-color: var(--color-accent-history);
+  box-shadow: 0 0 0 3px hsl(35 60% 54% / 0.14);
+}
+
+.hist-inline-editor__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.hist-inline-editor__status {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  flex: 1;
+  min-width: 0;
+}
+
+.hist-inline-editor__status--saved { color: var(--color-accent-oracle); }
+.hist-inline-editor__status--error { color: var(--color-accent-blind); }
+
+.hist-inline-editor__hint {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  opacity: 0.50;
+  white-space: nowrap;
+}
+
+.hist-inline-editor__save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-history);
+  color: hsl(40 30% 98%);
+  font-size: var(--type-sm);
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition:
+    background  var(--dur-fast) var(--ease-out-soft),
+    transform   var(--dur-fast) var(--ease-spring),
+    opacity     var(--dur-fast);
+  white-space: nowrap;
+}
+
+.hist-inline-editor__save:hover:not(:disabled) {
+  background: var(--prim-sepia-500);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px hsl(35 55% 44% / 0.3);
+}
+
+.hist-inline-editor__save:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.hist-inline-editor__save:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.hist-inline-editor__save--loading {
+  opacity: 0.75;
+}
+
+/* ── Loading dots ── */
+.hist-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.hist-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dot-bounce 0.9s ease-in-out infinite;
+}
+
+.hist-dots span:nth-child(2) { animation-delay: 0.20s; }
+.hist-dots span:nth-child(3) { animation-delay: 0.40s; }
+
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE — single page with flip transitions
+   ══════════════════════════════════════════════════════════════ */
+
+.hist-mobile-page {
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow:
+    0 4px 16px hsl(220 20% 10% / 0.09),
+    0 16px 40px hsl(220 20% 10% / 0.10);
+}
+
+[data-theme="dark"] .hist-mobile-page {
+  box-shadow:
+    0 4px 16px hsl(0 0% 0% / 0.40),
+    0 16px 40px hsl(0 0% 0% / 0.45);
+}
+
+.hist-mobile-page--flip-forward {
+  animation: mobile-flip-out-forward 200ms cubic-bezier(0.64, 0, 0.78, 0) both;
+}
+
+.hist-mobile-page--flip-backward {
+  animation: mobile-flip-out-backward 200ms cubic-bezier(0.64, 0, 0.78, 0) both;
+}
+
+.hist-mobile-page:not(.hist-mobile-page--flip-forward):not(.hist-mobile-page--flip-backward) {
+  animation: mobile-flip-in-forward 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   REDUCED MOTION — skip all 3D and page-flip transforms
+   ══════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .hist-book--open .hist-book__page--left,
+  .hist-book--open .hist-book__page--right,
+  .hist-book--flip-forward .hist-book__page--left,
+  .hist-book--flip-forward .hist-book__page--right,
+  .hist-book--flip-backward .hist-book__page--left,
+  .hist-book--flip-backward .hist-book__page--right,
+  .hist-book:not(.hist-book--flip-forward):not(.hist-book--flip-backward) .hist-book__page--left,
+  .hist-book:not(.hist-book--flip-forward):not(.hist-book--flip-backward) .hist-book__page--right,
+  .hist-mobile-page--flip-forward,
+  .hist-mobile-page--flip-backward,
+  .hist-mobile-page:not(.hist-mobile-page--flip-forward):not(.hist-mobile-page--flip-backward) {
+    animation: none !important;
+  }
+}

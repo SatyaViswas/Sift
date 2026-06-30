@@ -66,6 +66,8 @@
   .app-root--oracle .app-root__blob--2       { background: var(--prim-indigo-500); }
   .app-root--blindspots .app-root__blob--1   { background: var(--prim-rose-400); }
   .app-root--blindspots .app-root__blob--2   { background: var(--prim-indigo-500); }
+  .app-root--history .app-root__blob--1      { background: var(--prim-sepia-400); }
+  .app-root--history .app-root__blob--2      { background: var(--prim-sepia-200); }
 
   [data-theme="dark"] .app-root__blob--1 { opacity: 0.09; }
   [data-theme="dark"] .app-root__blob--2 { opacity: 0.07; }

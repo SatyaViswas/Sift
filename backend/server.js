@@ -1,12 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 5051;;
+const PORT = process.env.PORT || 5051;
+const FASTAPI_URL = 'http://127.0.0.1:8000';
 
 // 1. Global Middleware
 app.use(cors());
@@ -16,80 +14,37 @@ app.use(express.urlencoded({ extended: true }));
 // 2. Mock Multi-Tenancy Engine
 app.use((req, res, next) => {
     const profile = req.headers['x-user-profile'] || req.query.user;
-    // Do not block globally here; instead, assign a fallback or handle missing tokens gracefully at the route layer
     req.userProfile = profile || 'default_user';
     next();
 });
 
-// 3. Bridge Utility Layer
-const callMemoryBridge = (profile, action, data) => {
-    return new Promise((resolve, reject) => {
-        // Explicitly target local virtual environment Python executable
-        const pythonExecutable = './venv/bin/python';
+// Helper for fetch proxying
+const proxyFetch = async (url, method, body = null) => {
+    const options = {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+    };
+    if (body) {
+        options.body = JSON.stringify(body);
+    }
 
-        const args = [
-            path.join(__dirname, 'memory_bridge.py'),
-            profile,
-            action,
-            JSON.stringify(data || {})
-        ];
-
-        const pythonProcess = spawn(pythonExecutable, args);
-
-        let stdoutData = '';
-        let stderrData = '';
-
-        pythonProcess.stdout.on('data', (chunk) => {
-            stdoutData += chunk.toString();
-        });
-
-        pythonProcess.stderr.on('data', (chunk) => {
-            stderrData += chunk.toString();
-        });
-
-        pythonProcess.on('close', (code) => {
-            if (code !== 0 && !stdoutData.trim()) {
-                // If python exited with error and didn't output a graceful JSON error
-                return reject({
-                    status: 'error',
-                    message: `Python process exited with code ${code}`,
-                    details: stderrData
-                });
-            }
-
-            try {
-                // Parse stdout cleanly.
-                // We split by newline and take the last line in case other modules printed logs before the final JSON
-                const lines = stdoutData.trim().split('\n');
-                const lastLine = lines[lines.length - 1];
-                const parsedOutput = JSON.parse(lastLine);
-
-                if (parsedOutput.status === 'error') {
-                    reject(parsedOutput);
-                } else {
-                    resolve(parsedOutput);
-                }
-            } catch (e) {
-                reject({
-                    status: 'error',
-                    message: 'Failed to parse Python script output',
-                    rawOutput: stdoutData,
-                    stderr: stderrData
-                });
-            }
-        });
-    });
-};
-
-// Global Execution Queue Chain to prevent concurrent DB locking by Python processes
-let queueChain = Promise.resolve();
-
-const queuedMemoryBridge = (profile, action, data) => {
-    return new Promise((resolve, reject) => {
-        queueChain = queueChain.then(() => {
-            return callMemoryBridge(profile, action, data).then(resolve).catch(reject);
-        });
-    });
+    try {
+        const response = await fetch(url, options);
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            const text = await response.text();
+            throw new Error(`Failed to parse JSON response: ${text}`);
+        }
+        
+        if (!response.ok) {
+            throw data;
+        }
+        return data;
+    } catch (error) {
+        throw error;
+    }
 };
 
 app.get('/', (req, res) => {
@@ -99,7 +54,8 @@ app.get('/', (req, res) => {
 // 4. Base Test Endpoint
 app.get('/api/health', async (req, res) => {
     try {
-        const result = await queuedMemoryBridge(req.userProfile, 'health_check', { test: true });
+        const params = new URLSearchParams({ profile: req.userProfile });
+        const result = await proxyFetch(`${FASTAPI_URL}/api/health?${params}`, 'GET');
         res.json({
             status: 'success',
             message: 'Server is healthy and bridge is connected.',
@@ -118,7 +74,10 @@ app.post('/api/memory/ingest', async (req, res) => {
             return res.status(400).json({ error: "Missing 'text' in request body." });
         }
 
-        const result = await queuedMemoryBridge(req.userProfile, 'ingest', { text });
+        const result = await proxyFetch(`${FASTAPI_URL}/api/ingest`, 'POST', {
+            profile: req.userProfile,
+            text
+        });
         res.status(200).json(result);
     } catch (error) {
         console.error('Ingest Pipeline Error:', error);
@@ -132,7 +91,10 @@ app.post('/api/memory/recover', async (req, res) => {
         const { question, state } = req.body || {};
         const query = question || state || "";
         
-        const result = await queuedMemoryBridge(req.userProfile, 'recover', { query });
+        const result = await proxyFetch(`${FASTAPI_URL}/api/recover`, 'POST', {
+            profile: req.userProfile,
+            query
+        });
         res.status(200).json(result);
     } catch (error) {
         console.error('Oracle Pipeline Error:', error);
@@ -143,7 +105,8 @@ app.post('/api/memory/recover', async (req, res) => {
 // Phase 3: Analytics Engine
 app.get('/api/memory/blindspots', async (req, res) => {
     try {
-        const result = await queuedMemoryBridge(req.userProfile, 'blindspots', {});
+        const params = new URLSearchParams({ profile: req.userProfile });
+        const result = await proxyFetch(`${FASTAPI_URL}/api/blindspots?${params}`, 'GET');
         res.status(200).json(result);
     } catch (error) {
         console.error('Analytics Pipeline Error:', error);
@@ -159,7 +122,8 @@ app.put('/api/memory/update', async (req, res) => {
             return res.status(400).json({ error: "Missing or empty 'newText' in request body." });
         }
 
-        const result = await queuedMemoryBridge(req.userProfile, 'update', {
+        const result = await proxyFetch(`${FASTAPI_URL}/api/update`, 'PUT', {
+            profile: req.userProfile,
             entryId: entryId || null,
             originalText: originalText || '',
             newText: newText.trim(),
@@ -168,6 +132,42 @@ app.put('/api/memory/update', async (req, res) => {
     } catch (error) {
         console.error('Memory Update Pipeline Error:', error);
         res.status(500).json({ status: 'error', message: 'Internal server error during memory update.', details: error });
+    }
+});
+
+// Phase 7B: Intentional Forgetting
+app.post('/api/memory/forget', async (req, res) => {
+    try {
+        const { topic } = req.body;
+        if (!topic) {
+            return res.status(400).json({ error: "Missing 'topic' in request body." });
+        }
+
+        const result = await proxyFetch(`${FASTAPI_URL}/api/forget`, 'POST', {
+            profile: req.userProfile,
+            topic
+        });
+        res.status(200).json(result);
+    } catch (error) {
+        console.error('Forget Pipeline Error:', error);
+        res.status(500).json({ status: 'error', message: 'Internal server error during forget operation.', details: error });
+    }
+});
+
+// Phase 7B: Improve Oracle Recommendations
+app.post('/api/memory/improve', async (req, res) => {
+    try {
+        const { helpful, context } = req.body;
+        
+        const result = await proxyFetch(`${FASTAPI_URL}/api/improve`, 'POST', {
+            profile: req.userProfile,
+            helpful: !!helpful,
+            context: context || ""
+        });
+        res.status(200).json(result);
+    } catch (error) {
+        console.error('Improve Pipeline Error:', error);
+        res.status(500).json({ status: 'error', message: 'Internal server error during improve operation.', details: error });
     }
 });
 

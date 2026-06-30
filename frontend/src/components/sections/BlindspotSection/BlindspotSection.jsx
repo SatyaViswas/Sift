@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchBlindspots } from '../../../utils/api';
+import MemorySafeguardModal from '../../MemorySafeguardModal/MemorySafeguardModal';
 import './BlindspotSection.css';
 
 /**
@@ -13,6 +14,7 @@ export default function BlindspotSection() {
   const [error, setError]         = useState(null);
   const [emptyState, setEmptyState] = useState(false);
   const [lastFetched, setLastFetched] = useState(null);
+  const [safeguardTopic, setSafeguardTopic] = useState(null);
 
   const loadInsights = useCallback(async () => {
     setLoading(true);
@@ -176,11 +178,32 @@ export default function BlindspotSection() {
                     </span>
                   )}
                 </div>
+
+                <div className="blindspot-card__actions">
+                  <button 
+                    className="blindspot-card__btn-prune"
+                    onClick={() => setSafeguardTopic(insight.title || insight.pattern)}
+                  >
+                    Dissolve Connection
+                  </button>
+                </div>
               </div>
             </article>
           ))
         )}
       </div>
+
+      {safeguardTopic && (
+        <MemorySafeguardModal 
+          topic={safeguardTopic} 
+          onClose={() => setSafeguardTopic(null)} 
+          onForgotten={() => {
+            setSafeguardTopic(null);
+            // Re-fetch or manually remove from state
+            setInsights(prev => prev.filter(i => (i.title || i.pattern) !== safeguardTopic));
+          }} 
+        />
+      )}
 
     </section>
   );

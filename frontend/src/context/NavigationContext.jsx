@@ -2,15 +2,15 @@ import { createContext, useContext, useState, useCallback, useRef } from 'react'
 
 /**
  * NavigationContext — Manages active tab and slide transition direction.
- * Sections: 'slate' | 'oracle' | 'blindspots'
+ * Sections: 'slate' | 'oracle' | 'blindspots' | 'history'
  * 
  * Direction logic:
- *   slate ↔ oracle : horizontal (left/right)
+ *   slate ↔ oracle ↔ history : horizontal (left/right)
  *   any  ↔ blindspots : vertical (up/down)
  */
 const NavigationContext = createContext(null);
 
-const TAB_ORDER = ['slate', 'oracle', 'blindspots'];
+const TAB_ORDER = ['slate', 'oracle', 'blindspots', 'history'];
 
 function getDirection(from, to) {
   const fromIdx = TAB_ORDER.indexOf(from);

@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { recoverMemory } from '../../../utils/api';
+import { recoverMemory, improveMemory } from '../../../utils/api';
 import { useSpeechRecognition } from '../../../hooks/useSpeechRecognition';
 import MicOrb from '../../MicOrb/MicOrb';
+import MemorySafeguardModal from '../../MemorySafeguardModal/MemorySafeguardModal';
 import './OracleSection.css';
 
 /**
@@ -30,6 +31,8 @@ export default function OracleSection() {
     return [];
   });
   const [isThinking, setThinking] = useState(false);
+  const [safeguardTopic, setSafeguardTopic] = useState(null);
+  const [feedbackStates, setFeedbackStates] = useState({});
   const inputRef = useRef(null);
 
   const QUICK_PROMPTS = [
@@ -137,6 +140,19 @@ export default function OracleSection() {
     }
   }, [query, isThinking, orbState, stopListening, resetTranscript]);
 
+  const handleFeedback = useCallback(async (msgId, context, helpful) => {
+    if (feedbackStates[msgId]) return;
+    
+    setFeedbackStates(prev => ({ ...prev, [msgId]: helpful ? 'up' : 'down' }));
+    
+    try {
+      await improveMemory({ helpful, context });
+    } catch (err) {
+      console.error('Feedback failed:', err);
+      // Optional: show a small toast error here
+    }
+  }, [feedbackStates]);
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -224,6 +240,34 @@ export default function OracleSection() {
                     </div>
                     <div className="choice-shield__footer">
                       <p className="choice-shield__rationale">{msg.data.rationale}</p>
+                      
+                      <div className="choice-shield__actions">
+                        <div className="choice-shield__feedback">
+                          <button 
+                            className={`choice-shield__btn-feedback ${feedbackStates[msg.id] === 'up' ? 'choice-shield__btn-feedback--active' : ''}`}
+                            onClick={() => handleFeedback(msg.id, msg.data.headline, true)}
+                            disabled={!!feedbackStates[msg.id]}
+                            aria-label="Helpful"
+                          >
+                            👍
+                          </button>
+                          <button 
+                            className={`choice-shield__btn-feedback ${feedbackStates[msg.id] === 'down' ? 'choice-shield__btn-feedback--active' : ''}`}
+                            onClick={() => handleFeedback(msg.id, msg.data.headline, false)}
+                            disabled={!!feedbackStates[msg.id]}
+                            aria-label="Not helpful"
+                          >
+                            👎
+                          </button>
+                        </div>
+                        <button 
+                          className="choice-shield__btn-prune"
+                          onClick={() => setSafeguardTopic(msg.data.headline)}
+                        >
+                          Prune Memory
+                        </button>
+                      </div>
+
                       <time className="oracle-message__time" dateTime={msg.timestamp}>
                         {formatTime(msg.timestamp)}
                       </time>
@@ -318,6 +362,17 @@ export default function OracleSection() {
         </div>
         <p className="oracle-input-zone__hint">Backed by your journal memories</p>
       </div>
+
+      {safeguardTopic && (
+        <MemorySafeguardModal 
+          topic={safeguardTopic} 
+          onClose={() => setSafeguardTopic(null)} 
+          onForgotten={() => {
+            setSafeguardTopic(null);
+            // Optional: visually remove the message or show a toast
+          }} 
+        />
+      )}
 
     </section>
   );
