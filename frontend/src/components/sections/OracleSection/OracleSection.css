@@ -46,7 +46,31 @@
   font-weight: 400;
 }
 
-/* Mini Orb in header */
+/* Mini Orb and Header Actions */
+.oracle-section__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.oracle-section__clear-btn {
+  font-size: var(--type-xs);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out-soft);
+}
+
+.oracle-section__clear-btn:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-color: var(--color-text-muted);
+}
+
 .oracle-section__orb-mini {
   display: flex;
   align-items: center;
@@ -670,7 +694,9 @@
 .choice-shield__btn-feedback--active {
   background: var(--color-bg-elevated);
   border-color: var(--color-accent-oracle);
-  transform: scale(1.1);
+  box-shadow: 0 0 12px var(--color-accent-oracle-glow), inset 0 0 0 1px var(--color-accent-oracle-soft);
+  transform: scale(1.15);
+  color: var(--color-text-primary);
 }
 
 .choice-shield__btn-prune {
@@ -692,8 +718,9 @@
 
 /* ─── Calibrating Feedback Button State ─── */
 .choice-shield__btn-feedback--inactive {
-  opacity: 0.35;
-  filter: grayscale(0.8);
+  opacity: 0.25;
+  filter: grayscale(1);
+  transform: scale(0.92);
 }
 
 .choice-shield__btn-feedback--calibrating {
@@ -716,50 +743,112 @@
   animation: orb-spin 0.8s linear infinite;
 }
 
+/* Minimalist Inline Ink-Drop Loader */
+.feedback-spinner--ink-drop {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, var(--color-text-primary) 10%, transparent 60%);
+  animation: ink-drop-ripple 1.2s cubic-bezier(0.19, 1, 0.22, 1) infinite;
+}
+
+@keyframes ink-drop-ripple {
+  0% { transform: scale(0); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* ─── Active Selection Themes ─── */
+/* Helpful Theme */
+.choice-shield--helpful {
+  background: linear-gradient(135deg, hsl(140 15% 92%), hsl(150 20% 90%)), url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.05"/></svg>');
+  background-blend-mode: overlay;
+  border-color: hsl(150 30% 75%);
+  box-shadow: 0 4px 20px hsl(150 40% 60% / 0.15), inset 0 0 0 1px hsl(150 40% 60% / 0.3);
+  transition: all var(--dur-slow) var(--ease-out-soft);
+}
+[data-theme="dark"] .choice-shield--helpful {
+  background: linear-gradient(135deg, hsl(140 15% 15%), hsl(150 20% 12%)), url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.03"/></svg>');
+  background-blend-mode: overlay;
+  border-color: hsl(150 30% 25%);
+}
+
+/* Unhelpful Theme */
+.choice-shield--unhelpful {
+  background: linear-gradient(135deg, hsl(30 10% 90%), hsl(0 5% 85%));
+  border-color: hsl(20 15% 75%);
+  box-shadow: inset 0 2px 20px hsl(20 20% 40% / 0.1), inset 0 0 0 1px hsl(20 30% 60% / 0.2);
+  transition: all var(--dur-slow) var(--ease-out-soft);
+}
+[data-theme="dark"] .choice-shield--unhelpful {
+  background: linear-gradient(135deg, hsl(20 10% 15%), hsl(0 5% 12%));
+  border-color: hsl(20 15% 25%);
+  box-shadow: inset 0 2px 20px hsl(0 0% 0% / 0.4), inset 0 0 0 1px hsl(20 20% 30% / 0.5);
+}
+
 /* ─── Success Indicator / Calibration Morph ─── */
 .choice-shield__success-indicator {
   position: absolute;
   top: 40%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-2);
+  background: transparent;
+  border: none;
+  box-shadow: none;
   z-index: 10;
   pointer-events: none;
   animation: slide-fade-up var(--dur-normal) var(--ease-spring) forwards,
-             fade-out-custom var(--dur-normal) 1.2s forwards;
+             fade-out-custom var(--dur-normal) 1.8s forwards;
 }
 
 .choice-shield__success-indicator span {
-  font-family: var(--font-mono);
-  font-size: var(--type-xs);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--color-text-primary);
+  font-family: 'Caveat', 'Dancing Script', cursive, var(--font-display);
+  font-size: 2.2rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--prim-sage-600);
+  text-shadow: 0 2px 10px rgba(16, 185, 129, 0.2);
+  transform: rotate(-3deg);
+  display: inline-block;
+}
+[data-theme="dark"] .choice-shield__success-indicator span {
+  color: var(--prim-sage-300);
 }
 
 @keyframes slide-fade-up {
-  from { opacity: 0; transform: translate(-50%, -10%); }
-  to { opacity: 1; transform: translate(-50%, -50%); }
+  from { opacity: 0; transform: translate(-50%, -10%) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 @keyframes fade-out-custom {
-  to { opacity: 0; }
+  to { opacity: 0; transform: translate(-50%, -60%) scale(1.05); }
 }
 
 /* Soft ambient glow on success based on direction */
-.choice-shield--success.choice-shield--up {
+.choice-shield--success.choice-shield--helpful {
   box-shadow: 0 0 40px rgba(16, 185, 129, 0.15), inset 0 0 0 1px rgba(16, 185, 129, 0.3);
-  transition: all var(--dur-slow) var(--ease-out-soft);
 }
 
-.choice-shield--success.choice-shield--down {
+.choice-shield--success.choice-shield--unhelpful {
   box-shadow: 0 0 40px rgba(220, 38, 38, 0.15), inset 0 0 0 1px rgba(220, 38, 38, 0.3);
-  transition: all var(--dur-slow) var(--ease-out-soft);
+}
+
+/* ─── Prune Action Container Guardrails ─── */
+.choice-shield__prune-container {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-8px);
+  transition: all 0.4s var(--ease-spring);
+  pointer-events: none;
+}
+
+.choice-shield__prune-container--revealed {
+  max-height: 40px;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 /* ─── Retired State (Post-Success) ─── */

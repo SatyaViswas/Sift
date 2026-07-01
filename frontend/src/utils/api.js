@@ -21,8 +21,14 @@ async function request(method, path, body, profile) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message || `HTTP ${res.status}`);
+    let errPayload = { message: res.statusText };
+    try {
+      errPayload = await res.json();
+    } catch (e) {
+      // Non-JSON response
+    }
+    console.error("Frontend Network Rejection:", errPayload);
+    throw new Error(errPayload.message || errPayload.error || `HTTP ${res.status}`);
   }
   return res.json();
 }
@@ -48,13 +54,18 @@ export async function updateEntry({ entryId, originalText, newText, profile }) {
 }
 
 /** Phase 7B — Intentional Forgetting: Dissolve a semantic connection */
-export async function forgetMemory({ topic, profile }) {
-  return request('POST', '/api/memory/forget', { topic }, profile);
+export async function forgetMemory({ topic, entryId, profile }) {
+  return request('POST', '/api/memory/forget', { topic, entryId }, profile);
 }
 
 /** Phase 7B — Oracle Optimization: Reinforce graph weights based on feedback */
 export async function improveMemory({ helpful, context, profile }) {
   return request('POST', '/api/memory/improve', { helpful, context }, profile);
+}
+
+/** Fetch historical timeline from Supabase */
+export async function fetchTimeline({ profile } = {}) {
+  return request('GET', '/api/memory/timeline', null, profile);
 }
 
 /** Health check */

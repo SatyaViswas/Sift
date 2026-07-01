@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
 import { forgetMemory } from '../../utils/api';
+import { useMemory } from '../../context/MemoryContext';
 import './MemorySafeguardModal.css';
 
-export default function MemorySafeguardModal({ topic, onClose, onForgotten }) {
+export default function MemorySafeguardModal({ entry, topic, onClose, onForgotten }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState(null);
+  const { deleteMemory } = useMemory();
+
+  const displayTopic = entry ? (entry.summary_snippet || entry.content) : topic;
 
   const handleConfirm = async () => {
     setIsDeleting(true);
     setError(null);
     try {
-      await forgetMemory({ topic });
-      onForgotten(topic);
+      if (entry) {
+         await deleteMemory(entry);
+      } else {
+         await forgetMemory({ topic });
+      }
+      onForgotten(displayTopic);
     } catch (err) {
       console.error('Failed to dissolve connection:', err);
       setError('Failed to prune memory. Please try again.');
@@ -36,7 +44,7 @@ export default function MemorySafeguardModal({ topic, onClose, onForgotten }) {
             Sift will permanently dissolve your past relationship logs from your recovery graph regarding:
           </p>
           <div className="safeguard-modal__topic-card">
-            <span className="safeguard-modal__topic-text">"{topic}"</span>
+            <span className="safeguard-modal__topic-text">"{displayTopic}"</span>
           </div>
           <p className="safeguard-modal__text safeguard-modal__text--sub">
             Your other journal entries will remain untouched. This action cannot be undone.

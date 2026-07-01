@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { updateEntry } from '../../../utils/api';
+import { useMemory } from '../../../context/MemoryContext';
 import MemorySafeguardModal from '../../MemorySafeguardModal/MemorySafeguardModal';
 import './HistorySection.css';
 
@@ -46,26 +47,6 @@ function buildMonthGrid(year, month) {
   return grid;
 }
 
-function loadAllEntries() {
-  const result = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key || !key.startsWith('sift_slate_entries_')) continue;
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) continue;
-      const parsed = JSON.parse(raw);
-      if (parsed.entries && Array.isArray(parsed.entries)) {
-        const dk = parsed.date || toDateKey(new Date());
-        result[dk] = (result[dk] || []).concat(
-          parsed.entries.filter(e => e.status === 'saved')
-        );
-      }
-    } catch { /* ignore malformed */ }
-  }
-  return result;
-}
-
 /* ─── EntryCard ──────────────────────────────────────────────── */
 function EntryCard({ entry, onEdit, onDelete, isFading }) {
   const [hovered, setHovered] = useState(false);
@@ -88,7 +69,7 @@ function EntryCard({ entry, onEdit, onDelete, isFading }) {
           {entry.isSnippet ? '⚡ Snippet' : '📖 Reflection'}
         </span>
       </div>
-      <p className="hist-entry__text">{entry.text}</p>
+      <p className="hist-entry__text">{entry.content}</p>
 
       <div
         className={`hist-entry__actions ${hovered ? 'hist-entry__actions--visible' : ''}`}
@@ -125,7 +106,7 @@ function EntryCard({ entry, onEdit, onDelete, isFading }) {
 
 /* ─── InlineEditor ───────────────────────────────────────────── */
 function InlineEditor({ entry, onSave, onCancel }) {
-  const [text, setText] = useState(entry.text);
+  const [text, setText] = useState(entry.content);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
   const textareaRef = useRef(null);
@@ -142,11 +123,11 @@ function InlineEditor({ entry, onSave, onCancel }) {
 
   const handleSave = useCallback(async () => {
     const trimmed = text.trim();
-    if (!trimmed || trimmed === entry.text.trim() || saving) return;
+    if (!trimmed || trimmed === (entry.content || '').trim() || saving) return;
     setSaving(true);
     setStatus(null);
     try {
-      await updateEntry({ entryId: entry.id, originalText: entry.text, newText: trimmed });
+      await updateEntry({ entryId: entry.id, originalText: entry.content, newText: trimmed });
       setStatus('saved');
       onSave(entry.id, trimmed);
       setTimeout(onCancel, 700);
@@ -156,7 +137,7 @@ function InlineEditor({ entry, onSave, onCancel }) {
     }
   }, [text, entry, saving, onSave, onCancel]);
 
-  const hasChanges = text.trim() !== entry.text.trim();
+  const hasChanges = text.trim() !== (entry.content || '').trim();
   const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
@@ -422,7 +403,18 @@ function MonthPopover({ selectedDate, onSelectDate, onClose }) {
 
 /* ─── Main Component ─────────────────────────────────────────── */
 export default function HistorySection() {
-  const [allEntries, setAllEntries] = useState({});
+  const { journalTimelineStream, updateMemory, deleteMemory } = useMemory();
+  
+  const allEntries = useMemo(() => {
+    const grouped = {};
+    journalTimelineStream.forEach(entry => {
+      const key = toDateKey(new Date(entry.timestamp));
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(entry);
+    });
+    return grouped;
+  }, [journalTimelineStream]);
+
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [editingId, setEditingId] = useState(null);
   const [safeguardEntry, setSafeguardEntry] = useState(null);
@@ -435,19 +427,6 @@ export default function HistorySection() {
   const [pageFlipping, setPageFlipping] = useState(false);
   const [flipDirection, setFlipDirection] = useState('forward'); // 'forward' | 'backward'
   const prevDateRef = useRef(selectedDate);
-
-  useEffect(() => {
-    setAllEntries(loadAllEntries());
-  }, []);
-
-  const syncFromStorage = useCallback(() => {
-    setAllEntries(loadAllEntries());
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('sift_sync', syncFromStorage);
-    return () => window.removeEventListener('sift_sync', syncFromStorage);
-  }, [syncFromStorage]);
 
   useEffect(() => {
     const t = setTimeout(() => setBookMounted(true), 80);
@@ -488,55 +467,16 @@ export default function HistorySection() {
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
 
   const handleSave = useCallback((id, newText) => {
-    setAllEntries(prev => {
-      const updated = { ...prev };
-      if (updated[currentDateKey]) {
-        updated[currentDateKey] = updated[currentDateKey].map(e =>
-          e.id === id ? { ...e, text: newText } : e
-        );
-        const key = 'sift_slate_entries_default_user';
-        const existing = JSON.parse(localStorage.getItem(key) || '{}');
-        if (existing.entries) {
-          existing.entries = existing.entries.map(e => e.id === id ? { ...e, text: newText } : e);
-          localStorage.setItem(key, JSON.stringify(existing));
-        }
-      }
-      return updated;
-    });
-  }, [currentDateKey]);
+    updateMemory(id, null, newText);
+  }, [updateMemory]);
 
   const handleDelete = useCallback((entry) => {
     setSafeguardEntry(entry);
   }, []);
 
   const handleForgotten = useCallback(() => {
-    if (!safeguardEntry) return;
-
-    const idToRemove = safeguardEntry.id;
-    setFadingId(idToRemove);
-
-    // Immediate sync to avoid unmount race conditions
-    const key = 'sift_slate_entries_default_user';
-    const existing = JSON.parse(localStorage.getItem(key) || '{}');
-    if (existing.entries) {
-      existing.entries = existing.entries.filter(e => e.id !== idToRemove);
-      localStorage.setItem(key, JSON.stringify(existing));
-      window.dispatchEvent(new Event('sift_sync'));
-    }
-
     setSafeguardEntry(null);
-
-    setTimeout(() => {
-      setAllEntries(prev => {
-        const updated = { ...prev };
-        if (updated[currentDateKey]) {
-          updated[currentDateKey] = updated[currentDateKey].filter(e => e.id !== idToRemove);
-        }
-        return updated;
-      });
-      setFadingId(null);
-    }, 400); // Wait for transition
-  }, [currentDateKey, safeguardEntry]);
+  }, []);
 
   const spreadClass = [
     'hist-book',
@@ -672,7 +612,8 @@ export default function HistorySection() {
       {/* ── Memory Safeguard Modal ── */}
       {safeguardEntry && (
         <MemorySafeguardModal
-          topic={safeguardEntry.heading || safeguardEntry.text}
+          entry={safeguardEntry}
+          topic={safeguardEntry.content}
           onClose={() => setSafeguardEntry(null)}
           onForgotten={handleForgotten}
         />

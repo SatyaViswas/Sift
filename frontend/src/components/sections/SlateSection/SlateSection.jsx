@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ingestEntry, updateEntry } from '../../../utils/api';
 import { useSpeechRecognition } from '../../../hooks/useSpeechRecognition';
+import { useMemory } from '../../../context/MemoryContext';
 import DailyPrompt from '../../DailyPrompt/DailyPrompt';
 import MicOrb from '../../MicOrb/MicOrb';
 import MemorySafeguardModal from '../../MemorySafeguardModal/MemorySafeguardModal';
@@ -19,7 +20,8 @@ import './SlateSection.css';
 
 const SLATE_CACHE_KEY        = 'sift_slate_draft_default_user';
 const SLATE_ENTRIES_CACHE_KEY = 'sift_slate_entries_default_user';
-const MAX_CHARS = 2000;
+const SNIPPET_MAX_CHARS = 2000;
+const DEEP_MAX_CHARS = 30000;
 
 const speakFeedback = (text) => {
   if (!('speechSynthesis' in window)) return;
@@ -32,7 +34,7 @@ const speakFeedback = (text) => {
 
 /* ── Edit Modal ─────────────────────────────────────────────── */
 function EditModal({ entry, onClose, onUpdated }) {
-  const [editText, setEditText]       = useState(entry.text);
+  const [editText, setEditText]       = useState(entry.content);
   const [isUpdating, setIsUpdating]   = useState(false);
   const [statusMsg, setStatusMsg]     = useState(null); // { text, isError }
   const textareaRef                   = useRef(null);
@@ -55,7 +57,7 @@ function EditModal({ entry, onClose, onUpdated }) {
 
   const handleUpdate = useCallback(async () => {
     const trimmed = editText.trim();
-    if (!trimmed || trimmed === entry.text.trim() || isUpdating) return;
+    if (!trimmed || trimmed === (entry.content || '').trim() || isUpdating) return;
 
     setIsUpdating(true);
     setStatusMsg(null);
@@ -63,7 +65,7 @@ function EditModal({ entry, onClose, onUpdated }) {
     try {
       await updateEntry({
         entryId: entry.id,
-        originalText: entry.text,
+        originalText: entry.content,
         newText: trimmed,
       });
       setStatusMsg({ text: 'Memory updated ✓', isError: false });
@@ -77,7 +79,7 @@ function EditModal({ entry, onClose, onUpdated }) {
   }, [editText, entry, isUpdating, onUpdated, onClose]);
 
   const charCount = editText.length;
-  const hasChanges = editText.trim() !== entry.text.trim();
+  const hasChanges = editText.trim() !== (entry.content || '').trim();
 
   const formatTime = (iso) =>
     new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -107,7 +109,8 @@ function EditModal({ entry, onClose, onUpdated }) {
             className="slate-modal__textarea"
             value={editText}
             onChange={(e) => {
-              if (e.target.value.length <= MAX_CHARS) {
+              const max = entry.isSnippet ? SNIPPET_MAX_CHARS : DEEP_MAX_CHARS;
+              if (e.target.value.length <= max) {
                 setEditText(e.target.value);
                 setStatusMsg(null);
               }
@@ -121,12 +124,12 @@ function EditModal({ entry, onClose, onUpdated }) {
             aria-label="Edit entry text"
             placeholder="Revise your thought…"
             disabled={isUpdating}
-            maxLength={MAX_CHARS}
+            maxLength={entry.isSnippet ? SNIPPET_MAX_CHARS : DEEP_MAX_CHARS}
             spellCheck
             autoCorrect="on"
           />
-          <p className={`slate-modal__char-count ${charCount > MAX_CHARS * 0.9 ? 'slate-modal__char-count--warn' : ''}`} aria-live="polite">
-            {charCount}/{MAX_CHARS}
+          <p className={`slate-modal__char-count ${charCount > (entry.isSnippet ? SNIPPET_MAX_CHARS : DEEP_MAX_CHARS) * 0.9 ? 'slate-modal__char-count--warn' : ''}`} aria-live="polite">
+            {charCount}/{entry.isSnippet ? SNIPPET_MAX_CHARS : DEEP_MAX_CHARS}
           </p>
         </div>
         <div className="slate-modal__footer">
@@ -218,25 +221,99 @@ function VoiceSanctuary({
   );
 }
 
+/* ── Slate Card Component ───────────────────────────────────── */
+function SlateCard({ entry, formatTime, fadingId, handleEntryClick, handleEntryDelete }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const hasSummary = !!entry.summary_snippet;
+
+  const toggleExpand = (e) => {
+    e.stopPropagation();
+    setIsExpanded(!isExpanded);
+  };
+
+  return (
+    <article
+      className={`slate-entry slate-entry--${entry.status} ${entry.isSnippet ? 'slate-entry--snippet' : ''} ${fadingId === entry.id ? 'slate-entry--fading' : ''} ${isExpanded ? 'slate-entry--expanded' : ''}`}
+      onClick={hasSummary ? toggleExpand : undefined}
+      style={{ cursor: hasSummary ? 'pointer' : 'default', transition: 'all 0.3s ease' }}
+    >
+      <div className="slate-entry__body-btn" style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0 }}>
+        <div className="slate-entry__meta">
+          <div className="slate-entry__meta-left">
+            <time className="slate-entry__time" dateTime={entry.timestamp}>{formatTime(entry.timestamp)}</time>
+            <span className="slate-entry__type-badge" aria-hidden="true">{entry.isSnippet ? '⚡ snippet' : '📖 deep'}</span>
+          </div>
+          <div className="slate-entry__badges">
+            {entry.isVoice && <span className="slate-entry__voice-badge" aria-label="Voice entry">🎙</span>}
+            <span className={`slate-entry__status-badge slate-entry__status-badge--${entry.status}`}>
+              {entry.status === 'pending' && '●'}
+              {entry.status === 'saved'   && '✓'}
+              {entry.status === 'error'   && '✕'}
+            </span>
+          </div>
+        </div>
+        
+        {entry.heading && <h3 className="slate-entry__heading">{entry.heading}</h3>}
+        
+        <p className="slate-entry__text" style={{ transition: 'all 0.3s ease' }}>
+          {hasSummary && !isExpanded ? entry.summary_snippet : entry.content}
+        </p>
+
+        {entry.status === 'saved' && (
+          <div className="slate-entry__actions-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', minHeight: '20px' }}>
+            {hasSummary ? (
+              <span className="slate-entry__expand-hint" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                {isExpanded ? 'Tap to collapse' : 'Tap to expand'}
+              </span>
+            ) : <span />}
+            <button
+              className="slate-entry__edit-btn"
+              onClick={(e) => { e.stopPropagation(); handleEntryClick(entry); }}
+              aria-label="Edit entry"
+              style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" width="11" height="11">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+              Edit
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {entry.status === 'saved' && (
+        <button
+          className="slate-entry__delete-btn"
+          onClick={(e) => { e.stopPropagation(); handleEntryDelete(entry); }}
+          aria-label="Dissolve this memory entry"
+          type="button"
+          title="Dissolve memory"
+        >
+          <svg viewBox="0 0 24 24" fill="none" width="12" height="12" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            <path d="M9 6V4h6v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+        </button>
+      )}
+    </article>
+  );
+}
+
 /* ── Main Component ─────────────────────────────────────────── */
 export default function SlateSection() {
+  const { journalTimelineStream, submitMemory, updateMemory, deleteMemory } = useMemory();
+  
+  const todayKey = new Date().toLocaleDateString();
+  const entries = journalTimelineStream.filter(
+    e => new Date(e.timestamp).toLocaleDateString() === todayKey
+  );
+
   const [activeMode, setActiveMode]   = useState('snippet');
   const [draft, setDraft]             = useState(() => {
     return localStorage.getItem(SLATE_CACHE_KEY) || '';
-  });
-  const [entries, setEntries]         = useState(() => {
-    try {
-      const cached = localStorage.getItem(SLATE_ENTRIES_CACHE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed.date === new Date().toLocaleDateString()) {
-          return parsed.entries;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to parse cached Slate entries:', e);
-    }
-    return [];
   });
   const [editModal, setEditModal]     = useState(null);
   const [isSubmitting, setSubmitting] = useState(false);
@@ -266,7 +343,8 @@ export default function SlateSection() {
   } = useSpeechRecognition({
     silenceTimeoutMs: 2500,
     onTranscriptUpdate: (text) => {
-      const merged = text.slice(0, MAX_CHARS);
+      // Allow voice to capture up to DEEP_MAX_CHARS, we will truncate on submit if snippet mode
+      const merged = text.slice(0, DEEP_MAX_CHARS);
       setDraft(merged);
       setCharCount(merged.length);
       setInputMode('voice');
@@ -288,40 +366,7 @@ export default function SlateSection() {
     localStorage.setItem(SLATE_CACHE_KEY, draft);
   }, [draft]);
 
-  const syncFromStorage = useCallback(() => {
-    try {
-      const cached = localStorage.getItem(SLATE_ENTRIES_CACHE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed.date === new Date().toLocaleDateString()) {
-          setEntries(parsed.entries);
-        }
-      } else {
-        setEntries([]);
-      }
-    } catch (e) {
-      console.error('Failed to sync Slate entries:', e);
-    }
-  }, []);
 
-  useEffect(() => {
-    window.addEventListener('sift_sync', syncFromStorage);
-    return () => window.removeEventListener('sift_sync', syncFromStorage);
-  }, [syncFromStorage]);
-
-  useEffect(() => {
-    if (entries.length > 0) {
-      localStorage.setItem(SLATE_ENTRIES_CACHE_KEY, JSON.stringify({
-        date: new Date().toLocaleDateString(),
-        entries,
-      }));
-    } else {
-      localStorage.setItem(SLATE_ENTRIES_CACHE_KEY, JSON.stringify({
-        date: new Date().toLocaleDateString(),
-        entries: [],
-      }));
-    }
-  }, [entries]);
 
   const handleModeSwitch = useCallback((mode) => {
     if (mode === activeMode) return;
@@ -353,74 +398,64 @@ export default function SlateSection() {
 
   const handleChange = useCallback((e) => {
     const val = e.target.value;
-    if (val.length <= MAX_CHARS) {
+    const max = activeMode === 'snippet' ? SNIPPET_MAX_CHARS : DEEP_MAX_CHARS;
+    if (val.length <= max) {
       setDraft(val);
       setCharCount(val.length);
       setInputMode('typed');
     }
-  }, []);
+  }, [activeMode]);
 
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback((e) => {
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
+    if (e && e.stopPropagation) {
+      e.stopPropagation();
+    }
+    
     if (!draft.trim() || isSubmitting) return;
 
     if (orbState === 'listening') stopListening();
 
-    const text     = draft.trim();
-    const tempId   = Date.now();
-    const wasVoice = inputMode === 'voice';
     const isSnippet = activeMode === 'snippet';
+    const max = isSnippet ? SNIPPET_MAX_CHARS : DEEP_MAX_CHARS;
+    const activeInputString = draft.trim().slice(0, max);
+    const wasVoice = inputMode === 'voice';
 
-    const optimisticEntry = {
-      id: tempId,
-      text,
-      timestamp: new Date().toISOString(),
-      status: 'pending',
-      isVoice: wasVoice,
-      isSnippet,
-    };
-
-    setEntries(prev => [optimisticEntry, ...prev]);
-    setDraft('');
-    localStorage.removeItem(SLATE_CACHE_KEY);
-    setCharCount(0);
-    setInputMode('typed');
-    resetTranscript();
-    setVoiceReviewMode(false); // Close sanctuary if open
     setSubmitting(true);
 
-    setTimeout(() => {
-      if (isSnippet && snippetRef.current) snippetRef.current.focus();
-    }, 80);
+    submitMemory(activeInputString, wasVoice, isSnippet, (result) => {
+      setSubmitting(false);
 
-    try {
-      const result = await ingestEntry({ text });
-
-      if (result.status === 'forget_confirmation' && result.data && result.data.topic) {
-        // Intent Interception: User asked to forget something
+      if (result && result.status === 'forget_confirmation' && result.data && result.data.topic) {
         if (wasVoice) speakFeedback('I understand. Please confirm this deletion.');
         setSafeguardTopic(result.data.topic);
-        // Remove the optimistic entry since it was a command, not a journal entry
-        setEntries(prev => prev.filter(e => e.id !== tempId));
         return;
       }
-
+      
+      if (result && result.status === 'error') {
+        if (wasVoice) speakFeedback('Failed to save your entry. Please try again.');
+        return;
+      }
+      
+      // Post-Ingest State Splice
       if (wasVoice) {
         speakFeedback('Your entry is safely recorded.');
       }
 
-      setEntries(prev =>
-        prev.map(e => e.id === tempId ? { ...e, status: 'saved', heading: result.heading } : e)
-      );
-    } catch (err) {
-      console.error('Ingest failed:', err);
-      if (wasVoice) speakFeedback('Failed to save your entry. Please try again.');
-      setEntries(prev =>
-        prev.map(e => e.id === tempId ? { ...e, status: 'error' } : e)
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }, [draft, isSubmitting, inputMode, activeMode, orbState, stopListening, resetTranscript]);
+      setDraft('');
+      localStorage.removeItem(SLATE_CACHE_KEY);
+      setCharCount(0);
+      setInputMode('typed');
+      resetTranscript();
+      setVoiceReviewMode(false); // Close sanctuary if open
+
+      setTimeout(() => {
+        if (isSnippet && snippetRef.current) snippetRef.current.focus();
+      }, 80);
+    });
+  }, [draft, isSubmitting, inputMode, activeMode, orbState, stopListening, resetTranscript, submitMemory]);
 
   const handleKeyDown = useCallback((e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -446,10 +481,8 @@ export default function SlateSection() {
   }, []);
 
   const handleEntryUpdated = useCallback((id, newText) => {
-    setEntries(prev =>
-      prev.map(e => e.id === id ? { ...e, text: newText } : e)
-    );
-  }, []);
+    updateMemory(id, null, newText);
+  }, [updateMemory]);
 
   const handleEntryDelete = useCallback((entry) => {
     setSafeguardEntry(entry);
@@ -529,7 +562,7 @@ export default function SlateSection() {
               value={draft}
               onChange={(e) => {
                 const val = e.target.value;
-                if (val.length <= MAX_CHARS) {
+                if (val.length <= SNIPPET_MAX_CHARS) {
                   setDraft(val);
                   setCharCount(val.length);
                   setInputMode('typed');
@@ -592,15 +625,15 @@ export default function SlateSection() {
               placeholder="Begin writing. No filters, no judgment…"
               aria-label="Deep diary entry"
               rows={7}
-              maxLength={MAX_CHARS}
+              maxLength={DEEP_MAX_CHARS}
               disabled={isSubmitting}
               spellCheck
               autoCorrect="on"
             />
 
             <div className="slate-compose__footer">
-              <span className={`slate-compose__char-count ${charCount > MAX_CHARS * 0.9 ? 'slate-compose__char-count--warn' : ''}`} aria-live="polite">
-                {charCount}/{MAX_CHARS}
+              <span className={`slate-compose__char-count ${charCount > DEEP_MAX_CHARS * 0.9 ? 'slate-compose__char-count--warn' : ''}`} aria-live="polite">
+                {charCount}/{DEEP_MAX_CHARS}
               </span>
               <div className="slate-compose__actions">
                 <span className="slate-compose__shortcut" aria-hidden="true">⌘↵ to save</span>
@@ -654,66 +687,14 @@ export default function SlateSection() {
               Today · {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
             </p>
             {entries.map(entry => (
-              <article
+              <SlateCard
                 key={entry.id}
-                className={`slate-entry slate-entry--${entry.status} ${entry.isSnippet ? 'slate-entry--snippet' : ''} ${fadingId === entry.id ? 'slate-entry--fading' : ''}`}
-              >
-                <button
-                  className="slate-entry__body-btn"
-                  aria-label={`Journal entry at ${formatTime(entry.timestamp)}${entry.status === 'saved' ? '. Click to edit.' : ''}`}
-                  onClick={() => handleEntryClick(entry)}
-                  disabled={entry.status !== 'saved'}
-                  type="button"
-                >
-                  <div className="slate-entry__meta">
-                    <div className="slate-entry__meta-left">
-                      <time className="slate-entry__time" dateTime={entry.timestamp}>{formatTime(entry.timestamp)}</time>
-                      <span className="slate-entry__type-badge" aria-hidden="true">{entry.isSnippet ? '⚡ snippet' : '📖 deep'}</span>
-                    </div>
-                    <div className="slate-entry__badges">
-                      {entry.isVoice && <span className="slate-entry__voice-badge" aria-label="Voice entry">🎙</span>}
-                      <span className={`slate-entry__status-badge slate-entry__status-badge--${entry.status}`}>
-                        {entry.status === 'pending' && '●'}
-                        {entry.status === 'saved'   && '✓'}
-                        {entry.status === 'error'   && '✕'}
-                      </span>
-                    </div>
-                  </div>
-                  {entry.heading ? (
-                    <>
-                      <h3 className="slate-entry__heading">{entry.heading}</h3>
-                      <p className="slate-entry__text slate-entry__text--clamped">{entry.text}</p>
-                    </>
-                  ) : (
-                    <p className="slate-entry__text">{entry.text}</p>
-                  )}
-                  {entry.status === 'saved' && (
-                    <div className="slate-entry__edit-hint" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="none" width="11" height="11">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                      </svg>
-                      tap to edit
-                    </div>
-                  )}
-                </button>
-                {entry.status === 'saved' && (
-                  <button
-                    className="slate-entry__delete-btn"
-                    onClick={() => handleEntryDelete(entry)}
-                    aria-label="Dissolve this memory entry"
-                    type="button"
-                    title="Dissolve memory"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" width="12" height="12" aria-hidden="true">
-                      <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                      <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                      <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                      <path d="M9 6V4h6v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                    </svg>
-                  </button>
-                )}
-              </article>
+                entry={entry}
+                formatTime={formatTime}
+                fadingId={fadingId}
+                handleEntryClick={handleEntryClick}
+                handleEntryDelete={handleEntryDelete}
+              />
             ))}
           </>
         )}
@@ -752,38 +733,17 @@ export default function SlateSection() {
       {/* ── Safeguard Modal ── */}
       {(safeguardTopic || safeguardEntry) && (
         <MemorySafeguardModal 
-          topic={safeguardTopic || (safeguardEntry ? (safeguardEntry.heading || safeguardEntry.text) : '')} 
+          entry={safeguardEntry}
+          topic={safeguardTopic} 
           onClose={() => {
             setSafeguardTopic(null);
             setSafeguardEntry(null);
           }} 
           onForgotten={() => {
             if (safeguardEntry) {
-              const idToRemove = safeguardEntry.id;
-              
-              // Immediate sync to avoid unmount race conditions
-              const nextEntries = entries.filter(e => e.id !== idToRemove);
-              localStorage.setItem(SLATE_ENTRIES_CACHE_KEY, JSON.stringify({
-                date: new Date().toLocaleDateString(),
-                entries: nextEntries,
-              }));
-              window.dispatchEvent(new Event('sift_sync'));
-
               setSafeguardEntry(null);
-              setFadingId(idToRemove);
-              
-              setTimeout(() => {
-                setEntries(prev => prev.filter(e => e.id !== idToRemove));
-                setFadingId(null);
-              }, 400);
-            } else {
-              localStorage.setItem(SLATE_ENTRIES_CACHE_KEY, JSON.stringify({
-                date: new Date().toLocaleDateString(),
-                entries: [],
-              }));
-              window.dispatchEvent(new Event('sift_sync'));
-
-              setEntries([]);
+            }
+            if (safeguardTopic) {
               setSafeguardTopic(null);
             }
           }} 

@@ -1,10 +1,23 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 5051;
 const FASTAPI_URL = 'http://127.0.0.1:8000';
+
+const crypto = require('crypto');
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+let supabase = null;
+
+if (supabaseUrl && supabaseKey) {
+    supabase = createClient(supabaseUrl, supabaseKey);
+} else {
+    console.warn("WARNING: Supabase credentials missing. Database operations will fail.");
+}
 
 // 1. Global Middleware
 app.use(cors());
@@ -37,7 +50,7 @@ const proxyFetch = async (url, method, body = null) => {
             const text = await response.text();
             throw new Error(`Failed to parse JSON response: ${text}`);
         }
-        
+
         if (!response.ok) {
             throw data;
         }
@@ -74,14 +87,108 @@ app.post('/api/memory/ingest', async (req, res) => {
             return res.status(400).json({ error: "Missing 'text' in request body." });
         }
 
+        // 1. Call Python Intent Router FIRST
         const result = await proxyFetch(`${FASTAPI_URL}/api/ingest`, 'POST', {
             profile: req.userProfile,
             text
         });
-        res.status(200).json(result);
+
+        // 2. Halt automatic insertion if intent is a forget request
+        if (result && result.status === 'forget_confirmation') {
+            const topic = result.data?.topic || '';
+            
+            if (supabase) {
+                // Perform Supabase Parameter Search Bridge
+                const { data, error } = await supabase
+                    .from('journal_slates')
+                    .select('*')
+                    .eq('profile_id', req.userProfile)
+                    .ilike('content', `%${topic}%`);
+                    
+                if (error) {
+                    console.error('Supabase Search Error:', error);
+                    return res.status(500).json({ status: 'error', message: 'Database error during search.', details: error });
+                }
+                
+                return res.status(200).json({
+                    status: 'verification_required',
+                    topic: topic,
+                    matches: data || []
+                });
+            } else {
+                return res.status(200).json({
+                    status: 'verification_required',
+                    topic: topic,
+                    matches: []
+                });
+            }
+        }
+
+        // 3. Normal Data Ingestion
+        let databaseRecord = null;
+        if (supabase) {
+            const payload = { content: text, profile_id: req.userProfile };
+
+            const { data, error } = await supabase
+                .from('journal_slates')
+                .insert([payload])
+                .select()
+                .single();
+
+            if (error) {
+                console.error('Supabase Insert Error:', error);
+                return res.status(500).json({ status: 'error', message: 'Database error during ingestion.', details: error });
+            }
+            databaseRecord = data;
+        }
+
+        if (result && result.summary_snippet && databaseRecord && supabase) {
+            const { error: updateError } = await supabase
+                .from('journal_slates')
+                .update({ summary_snippet: result.summary_snippet })
+                .eq('id', databaseRecord.id);
+            
+            if (updateError) {
+                console.error('Supabase Update Summary Error:', updateError);
+            } else {
+                databaseRecord.summary_snippet = result.summary_snippet;
+            }
+        }
+
+        res.status(200).json({
+            status: 'success',
+            databaseRecord: databaseRecord,
+            graphEngine: result
+        });
     } catch (error) {
         console.error('Ingest Pipeline Error:', error);
-        res.status(500).json({ status: 'error', message: 'Internal server error during ingestion.', details: error });
+        res.status(500).json({ status: 'error', message: 'Internal server error during ingestion.', details: error.message || error });
+    }
+});
+
+// Phase 2B: Timeline Data Fetching
+app.get('/api/memory/timeline', async (req, res) => {
+    try {
+        if (!supabase) {
+            return res.status(500).json({ error: "Database connection not initialized." });
+        }
+
+        // FIXED: Condition updated to filter safely against your profile_id field token
+        const { data, error } = await supabase
+            .from('journal_slates')
+            .select('*')
+            .eq('profile_id', req.userProfile)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Supabase Query Error:', error);
+            return res.status(500).json({ status: 'error', message: 'Database error fetching timeline.', details: error });
+        }
+
+        res.status(200).json({ status: 'success', timeline: data });
+    } catch (error) {
+        console.error('Timeline Fetch Error:', error);
+        res.status(500).json({ status: 'error', message: 'Internal server error during timeline fetch.', details: error.message || error });
     }
 });
 
@@ -90,7 +197,7 @@ app.post('/api/memory/recover', async (req, res) => {
     try {
         const { question, state } = req.body || {};
         const query = question || state || "";
-        
+
         const result = await proxyFetch(`${FASTAPI_URL}/api/recover`, 'POST', {
             profile: req.userProfile,
             query
@@ -122,47 +229,87 @@ app.put('/api/memory/update', async (req, res) => {
             return res.status(400).json({ error: "Missing or empty 'newText' in request body." });
         }
 
+        let databaseRecord = null;
+        if (supabase && entryId) {
+            // FIXED: Target updates modified to point to content and filter via profile_id
+            const { data, error } = await supabase
+                .from('journal_slates')
+                .update({ content: newText.trim() })
+                .eq('id', entryId)
+                .eq('profile_id', req.userProfile)
+                .select()
+                .single();
+
+            if (error) {
+                console.error('Supabase Update Error:', error);
+                return res.status(500).json({ status: 'error', message: 'Database error during memory update.', details: error });
+            }
+            databaseRecord = data;
+        }
+
         const result = await proxyFetch(`${FASTAPI_URL}/api/update`, 'PUT', {
             profile: req.userProfile,
             entryId: entryId || null,
             originalText: originalText || '',
             newText: newText.trim(),
         });
-        res.status(200).json(result);
+
+        res.status(200).json({
+            status: 'success',
+            databaseRecord: databaseRecord,
+            graphEngine: result
+        });
     } catch (error) {
         console.error('Memory Update Pipeline Error:', error);
-        res.status(500).json({ status: 'error', message: 'Internal server error during memory update.', details: error });
+        res.status(500).json({ status: 'error', message: 'Internal server error during memory update.', details: error.message || error });
     }
 });
 
 // Phase 7B: Intentional Forgetting
 app.post('/api/memory/forget', async (req, res) => {
     try {
-        const { topic } = req.body;
-        if (!topic) {
-            return res.status(400).json({ error: "Missing 'topic' in request body." });
+        const { topic, entryId } = req.body;
+        if (!topic && !entryId) {
+            return res.status(400).json({ error: "Missing 'topic' or 'entryId' in request body." });
+        }
+
+        if (supabase && entryId) {
+            const { error } = await supabase
+                .from('journal_slates')
+                .delete()
+                .eq('id', entryId)
+                .eq('profile_id', req.userProfile);
+
+            if (error) {
+                console.error('Supabase Delete Error:', error);
+                return res.status(500).json({ status: 'error', message: 'Database error during memory deletion.', details: error });
+            }
         }
 
         const result = await proxyFetch(`${FASTAPI_URL}/api/forget`, 'POST', {
             profile: req.userProfile,
-            topic
+            topic: topic || "",
+            entryId: entryId || null
         });
         res.status(200).json(result);
     } catch (error) {
         console.error('Forget Pipeline Error:', error);
-        res.status(500).json({ status: 'error', message: 'Internal server error during forget operation.', details: error });
+        res.status(500).json({ status: 'error', message: 'Internal server error during forget operation.', details: error.message || error });
     }
 });
 
 // Phase 7B: Improve Oracle Recommendations
 app.post('/api/memory/improve', async (req, res) => {
     try {
-        const { helpful, context } = req.body;
-        
+        const { helpful, context, lookup_token } = req.body;
+
+        const final_token = lookup_token || crypto.createHash('sha256').update(context || "").digest('hex');
+
         const result = await proxyFetch(`${FASTAPI_URL}/api/improve`, 'POST', {
             profile: req.userProfile,
             helpful: !!helpful,
-            context: context || ""
+            context: context || "",
+            lookup_token: final_token
         });
         res.status(200).json(result);
     } catch (error) {

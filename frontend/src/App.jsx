@@ -1,5 +1,6 @@
 import { ThemeProvider } from './context/ThemeContext';
 import { NavigationProvider } from './context/NavigationContext';
+import { MemoryProvider } from './context/MemoryContext';
 import Chassis from './components/Chassis/Chassis';
 
 /**
@@ -10,7 +11,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <NavigationProvider>
-        <Chassis />
+        <MemoryProvider>
+          <Chassis />
+        </MemoryProvider>
       </NavigationProvider>
     </ThemeProvider>
   );

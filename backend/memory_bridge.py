@@ -57,6 +57,7 @@ class ImproveRequest(BaseModel):
     profile: str
     helpful: bool
     context: Optional[str] = ""
+    lookup_token: Optional[str] = None
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -86,6 +87,7 @@ async def ingest_memory(req: IngestRequest):
             "Determine if the user's text is an explicit request to FORGET or DELETE a specific memory, habit, or trait from their graph, "
             "or if it is just a normal journal entry.\n"
             "If it is a request to forget, output a JSON object with exactly: {\"intent\": \"forget\", \"topic\": \"<the exact trait/memory to forget>\"}.\n"
+            "IMPORTANT: The 'topic' value MUST be extracted strictly as the root entity name or primary noun phrase (e.g., extracting \"Interstellar\", \"Outer Wilds\", or \"Lulu Cafe\") rather than a conversational fragment like \"the movie interstellar\" or \"my experience at lulu cafe\". This guarantees our SQL wildcards can maximize text hits.\n"
             "If it is a normal entry, output: {\"intent\": \"journal\", \"heading\": \"<a short 3-5 word heading summarizing the entry>\"}.\n"
             "Do not output markdown, just raw JSON."
         )
@@ -120,6 +122,24 @@ async def ingest_memory(req: IngestRequest):
         print(f"Intent routing LLM call failed: {e}, falling back to standard ingest.")
         heading = None
 
+    summary_snippet = None
+    if len(req.text) > 250:
+        try:
+            summary_prompt = (
+                "Summarize this journal entry in 1-2 short sentences. "
+                "Return only the summary text, no quotes or prefix."
+            )
+            summary_resp = await acompletion(
+                model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
+                messages=[
+                    {"role": "system", "content": summary_prompt},
+                    {"role": "user", "content": req.text}
+                ]
+            )
+            summary_snippet = summary_resp.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"Summary generation failed: {e}")
+
     # Guard database operation with the lock
     try:
         async with cognee_lock:
@@ -127,7 +147,8 @@ async def ingest_memory(req: IngestRequest):
         return {
             "status": "success",
             "message": "Stored!",
-            "heading": heading
+            "heading": heading,
+            "summary_snippet": summary_snippet
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
@@ -153,26 +174,42 @@ async def recover_memory(req: RecoverRequest):
             context_str = " ".join([str(item) for item in context])
         else:
             context_str = str(context)
+            
+        feedback_history_str = ""
+        try:
+            manifest_path = f"oracle_manifest_{dataset_name}.json"
+            if os.path.exists(manifest_path):
+                with open(manifest_path, "r") as f:
+                    manifest_data = json.load(f)
+                    history_items = []
+                    for k, val in manifest_data.items():
+                        helpful_signal = "true" if val.get("helpful") else "false"
+                        history_items.append(f"- {val.get('summary')} (helpful: {helpful_signal})")
+                    feedback_history_str = "\n".join(history_items)
+        except Exception as e:
+            print(f"Failed to load feedback history: {e}")
+        
+        if not feedback_history_str:
+            feedback_history_str = "No feedback history available."
 
         system_prompt = (
-            "You are an omniscient personal diary assistant acting as a Meta-Cognitive Intent Router. "
-            "Dynamically evaluate the user's request against their historical graph data across two cognitive matrices.\n\n"
-            "Matrix 1 - Content Behavior & Affinity Rules:\n"
-            "1. Disposable/Consumable Content (Movies, Series, Story Games, Novels): Apply taste-extraction and exclusion. Infer what they liked, but recommend an alternative so they don't get a repeat.\n"
-            "2. High-Affinity Repeatable Experiences (Sports, Cafes, Specific Foods, Hobbies, Routines): Apply affinity-reinforcement. If liked in the past, prioritize re-recommending that exact asset. Do not exclude unless they explicitly ask for something 'new'.\n"
-            "3. Explicit Historical Recall Queries ('Where did I go?', 'What did I like before?'): Apply strict graph alignment. Return exact matching historical records. No substitution or alternatives.\n\n"
-            "Matrix 2 - Dynamic Knowledge Sourcing (Internal Graph vs. External World):\n"
-            "- Scenario A (Pure Graph Lock): The graph data fully answers the query or the user seeks purely an internal memory. Output: 100% past data.\n"
-            "- Scenario B (Blended Augmentation): The graph contains their affinity, but external data is needed for a fresh recommendation or local context matching that affinity. Output: Primary Past Data + Secondary External Knowledge.\n"
-            "- Scenario C (Cold Start Fallback): The user asks a doubt about a topic with absolutely zero reference points in their historical graph. Output: Explicitly state that no personal history was found on this topic, then fulfill the request beautifully using pure external world knowledge.\n\n"
-            "You must output your decision strictly as a clean JSON object with EXACTLY these four keys:\n"
+            "You are an empathetic, highly intelligent personal diary assistant acting as an Organic Intent Reasoner. "
+            "Treat the retrieved user graph logs and feedback history as a fluid, organic pool of human experiences. "
+            "Dynamically evaluate the nature of the user's query on the fly and adapt your style using common-sense human logic.\n\n"
+            "Multi-Option Scenario Rules:\n"
+            "- Repeatable Habits & Lifestyles (e.g., dining, cafes, activities): Recommend multiple verified favorites from the user's history that fit the contextual request. If there are too many favorites, dynamically select the top 2-4 most relevant entries.\n"
+            "- One-Time Consumables (e.g., movies, games, books): Suggest multiple distinct, unconsumed alternatives that collectively align with the user's established taste profile.\n"
+            "- Technical Doubts & Decision Making: Provide multiple alternative angles, distinct problem-solving options, or a tiered list of solution tracks so the user can evaluate different approaches.\n\n"
+            "Absolute Anti-Hallucination Guardrail:\n"
+            "You are strictly prohibited from inventing fictional businesses, non-existent cafes, fake items, or artificial technical steps. If recommending an item or location, you must rely exclusively on genuine preferences found within the user's memory or use completely real, verifiable, existing real-world entities.\n\n"
+            "You must output your final decision strictly as a clean JSON object containing EXACTLY these four keys:\n"
             "`type` (must be one of: 'wellness', 'entertainment', 'general'),\n"
             "`headline` (a brief, punchy title for your suggestion),\n"
-            "`recommendation` (the actionable advice, item suggestion, or memory recall), and\n"
-            "`rationale` (gracefully explain to the user *why* you are recommending an exact repeat, an alternative, or a fallback, matching the natural flow of an omniscient personal diary assistant).\n"
-            "Do not append any markdown decoration outside the raw JSON properties."
+            "`recommendation` (the string value MUST be formatted as a structured list containing multiple distinct choices, options, or solutions, using clean markdown bullet points or numbered lists inside the string. DO NOT use an array),\n"
+            "`rationale` (read like an empathetic, highly intelligent meta-cognitive diary assistant, clearly detailing how you cross-referenced their past inputs, affinities, and active exclusions to curate this specific set of options).\n\n"
+            "Absolute Rule: Do not append any markdown backticks or code block syntax wrappers outside the final raw JSON object."
         )
-        user_prompt = f"Historical Context:\n{context_str}\n\nUser Query/State:\n{req.query}"
+        user_prompt = f"[Long-Term Graph Context]:\n{context_str}\n\n[Direct Feedback History]:\n{feedback_history_str}\n\nUser Query/State:\n{req.query}"
 
         llm_response = await acompletion(
             model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
@@ -312,16 +349,14 @@ async def update_memory(req: UpdateRequest):
 async def forget_memory(req: ForgetConfirmRequest):
     dataset_name = f"user_{req.profile}"
     try:
-        # Guard database operation with the lock
         async with cognee_lock:
-            if hasattr(cognee, 'forget'):
-                 await cognee.forget(dataset_id=dataset_name)
-            else:
-                 print("Warning: cognee.forget not found. Mocking deletion.")
+            # Treat the deletion path as a selective context update using a soft-delete instruction string
+            soft_delete_instruction = f"USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING: {req.topic}"
+            await cognee.remember(soft_delete_instruction, dataset_name=dataset_name)
         
         return {
             "status": "success",
-            "message": f"Successfully dissolved connection regarding: {req.topic}"
+            "message": "Memory explicitly forgotten via soft-delete constraint."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Forget operation failed: {str(e)}")
@@ -331,15 +366,15 @@ async def improve_memory(req: ImproveRequest):
     dataset_name = f"user_{req.profile}"
     try:
         system_prompt = (
-            "You are a cognitive routing assistant for a personal graph database. "
-            "Based on the user's feedback (helpful: true/false) to a generated response (context), "
-            "synthesize a single-sentence, high-fidelity behavioral summary describing the user's intent or preference.\n\n"
-            "Rules:\n"
-            "- Scenario A: Recommendation + Helpful (True). Synthesize a high-affinity preference node (e.g., 'User expressed strong interest in checking out the recommendation: Severance').\n"
-            "- Scenario B: Recommendation + Unhelpful (False). Synthesize a negative preference edge or exclusion boundary (e.g., 'User rejected the recommendation of Severance; prioritize alternatives').\n"
-            "- Scenario C: Doubt/Query + Helpful (True). Synthesize a cognitive baseline update (e.g., 'User\\'s understanding cleared regarding Java memory management models').\n"
-            "- Scenario D: Doubt/Query + Unhelpful (False). Log a cognitive friction point (e.g., 'Explanation provided for memory leaks was insufficient or mismatched user context').\n\n"
-            "Output ONLY the single sentence summary, without any extra formatting or conversational text."
+            "You are an Organic Journal Memory Synthesizer for a personal graph database. "
+            "Analyze the original user query, the suggestion context, and the boolean helpful signal to generate a definitive 1-sentence statement of human fact.\n"
+            "The output must be written exactly like a factual journal log entry or an explicit user preference.\n\n"
+            "Rules & Examples:\n"
+            "- For Media/Recommendations (Movies, Shows, Books) + Helpful (True): The snippet must explicitly state consumption and approval. Example: 'User watched and highly enjoyed the movie Arrival.'\n"
+            "- For Media/Recommendations + Unhelpful (False): The snippet must explicitly log rejection. Example: 'User does not like or want to watch the movie Arrival.'\n"
+            "- For Answers to Doubts/Queries + Helpful (True): The snippet must confirm cognitive resolution. Example: 'User completely resolved their conceptual confusion regarding Java garbage collection execution paths.'\n"
+            "- For Answers to Doubts/Queries + Unhelpful (False): The snippet must indicate confusion. Example: 'User requires a different explanation for the concept.'\n\n"
+            "Output ONLY the raw, clean natural text statement. It must contain zero brackets, zero markdown formatting, zero quotes, and zero conversational prefixes."
         )
         
         user_prompt = f"Helpful Signal: {req.helpful}\nContext (Question & Answer):\n{req.context}"
@@ -356,7 +391,7 @@ async def improve_memory(req: ImproveRequest):
 
         # 1. Contextual Signature Matching
         import hashlib
-        context_hash = hashlib.sha256(req.context.encode('utf-8')).hexdigest()
+        context_hash = req.lookup_token if req.lookup_token else hashlib.sha256(req.context.encode('utf-8')).hexdigest()
 
         # Guard database operation with the lock
         async with cognee_lock:
@@ -370,12 +405,11 @@ async def improve_memory(req: ImproveRequest):
                     pass
 
             # 2. Idempotent Storage & Graph Overwrite Strategy
-            structural_entry = f"[ORACLE_CTX:{context_hash}] {summary}"
+            structural_entry = summary
             
             if context_hash in manifest:
                 print(f"Idempotent Storage: Overwriting structural text entry for context {context_hash}")
-                # If an exact match is discovered via our localized index map, 
-                # we push the updated structural entry to inherently update the semantic properties.
+                # We push the clean structural entry to inherently update the semantic properties.
                 await cognee.remember(structural_entry, dataset_name=dataset_name)
             else:
                 print(f"Idempotent Storage: Fresh ingest for context {context_hash}")
@@ -397,7 +431,8 @@ async def improve_memory(req: ImproveRequest):
             
         return {
             "status": "success",
-            "message": "Optimization loop triggered successfully."
+            "message": "Optimization loop triggered successfully.",
+            "lookup_token": context_hash
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Improve operation failed: {str(e)}")

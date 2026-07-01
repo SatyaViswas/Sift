@@ -3,6 +3,7 @@ import AppHeader from '../AppHeader/AppHeader';
 import BottomNav from '../BottomNav/BottomNav';
 import SidebarNav from '../SidebarNav/SidebarNav';
 import SectionManager from '../SectionManager/SectionManager';
+import ForgetVerificationModal from '../ForgetVerificationModal/ForgetVerificationModal';
 import './Chassis.css';
 
 /**
@@ -38,6 +39,9 @@ export default function Chassis() {
         {/* Mobile-only bottom nav */}
         <BottomNav />
       </div>
+
+      {/* Global Modals */}
+      <ForgetVerificationModal />
     </div>
   );
 }
