@@ -109,17 +109,36 @@ app.post('/api/memory/ingest', async (req, res) => {
                     console.error('Supabase Search Error:', error);
                     return res.status(500).json({ status: 'error', message: 'Database error during search.', details: error });
                 }
+                if (data && data.length === 0) {
+                    console.log(`No records found in Supabase for topic "${topic}". Forwarding soft-delete to Cognee directly.`);
+                    const forgetResult = await proxyFetch(`${FASTAPI_URL}/api/forget`, 'POST', {
+                        profile: req.userProfile,
+                        topic: topic,
+                        entryIds: []
+                    });
+                    return res.status(200).json({
+                        status: 'success',
+                        message: `No text records found, but memory for "${topic}" was successfully forgotten in the graph.`,
+                        bridgeResponse: forgetResult
+                    });
+                }
                 
                 return res.status(200).json({
                     status: 'verification_required',
                     topic: topic,
-                    matches: data || []
+                    matches: data
                 });
             } else {
-                return res.status(200).json({
-                    status: 'verification_required',
+                console.log(`No Supabase instance. Forwarding soft-delete to Cognee directly for topic "${topic}".`);
+                const forgetResult = await proxyFetch(`${FASTAPI_URL}/api/forget`, 'POST', {
+                    profile: req.userProfile,
                     topic: topic,
-                    matches: []
+                    entryIds: []
+                });
+                return res.status(200).json({
+                    status: 'success',
+                    message: `Memory for "${topic}" was successfully forgotten in the graph.`,
+                    bridgeResponse: forgetResult
                 });
             }
         }

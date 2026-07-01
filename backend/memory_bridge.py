@@ -170,43 +170,100 @@ async def recover_memory(req: RecoverRequest):
             else:
                 raise recall_err
         
+        explicitly_deleted_topics = []
+        raw_context_lines = []
+
         if isinstance(context, list):
-            context_str = " ".join([str(item) for item in context])
+            for item in context:
+                item_str = str(item)
+                if "USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING:" in item_str:
+                    topic = item_str.split("USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING:")[1].strip()
+                    topic = topic.strip(".!?,")
+                    explicitly_deleted_topics.append(topic.lower())
+                else:
+                    raw_context_lines.append(item_str)
         else:
-            context_str = str(context)
+            for line in str(context).split('\n'):
+                if "USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING:" in line:
+                    topic = line.split("USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING:")[1].strip()
+                    topic = topic.strip(".!?,")
+                    explicitly_deleted_topics.append(topic.lower())
+                else:
+                    raw_context_lines.append(line)
             
-        feedback_history_str = ""
+        manifest_history_lines = []
         try:
             manifest_path = f"oracle_manifest_{dataset_name}.json"
             if os.path.exists(manifest_path):
                 with open(manifest_path, "r") as f:
                     manifest_data = json.load(f)
-                    history_items = []
                     for k, val in manifest_data.items():
-                        helpful_signal = "true" if val.get("helpful") else "false"
-                        history_items.append(f"- {val.get('summary')} (helpful: {helpful_signal})")
-                    feedback_history_str = "\n".join(history_items)
+                        helpful_signal = val.get("helpful")
+                        summary_text = val.get('summary', '')
+                        if not helpful_signal:
+                            explicitly_deleted_topics.append(str(k).lower())
+                            
+                        helpful_str = "true" if helpful_signal else "false"
+                        manifest_history_lines.append(f"- {summary_text} (helpful: {helpful_str})")
         except Exception as e:
             print(f"Failed to load feedback history: {e}")
+
+        # Post-Recall Context Pruning
+        def prune_lines(lines, deleted_topics):
+            pruned = []
+            for line in lines:
+                line_lower = line.lower()
+                drop = False
+                for t in deleted_topics:
+                    if t and t in line_lower:
+                        drop = True
+                        break
+                if not drop:
+                    pruned.append(line)
+            return pruned
+
+        clean_context_lines = prune_lines(raw_context_lines, explicitly_deleted_topics)
+        clean_manifest_lines = prune_lines(manifest_history_lines, explicitly_deleted_topics)
+
+        context_str = " ".join(clean_context_lines)
+        feedback_history_str = "\n".join(clean_manifest_lines)
         
-        if not feedback_history_str:
+        if not feedback_history_str.strip():
             feedback_history_str = "No feedback history available."
 
         system_prompt = (
-            "You are an empathetic, highly intelligent personal diary assistant acting as an Organic Intent Reasoner. "
-            "Treat the retrieved user graph logs and feedback history as a fluid, organic pool of human experiences. "
-            "Dynamically evaluate the nature of the user's query on the fly and adapt your style using common-sense human logic.\n\n"
-            "Multi-Option Scenario Rules:\n"
-            "- Repeatable Habits & Lifestyles (e.g., dining, cafes, activities): Recommend multiple verified favorites from the user's history that fit the contextual request. If there are too many favorites, dynamically select the top 2-4 most relevant entries.\n"
-            "- One-Time Consumables (e.g., movies, games, books): Suggest multiple distinct, unconsumed alternatives that collectively align with the user's established taste profile.\n"
+            "You are an empathetic, highly intelligent personal diary assistant acting as a strict, reality-grounded Organic Intent Reasoner.\n\n"
+            
+            "CRITICAL COMPLIANCE RULE: ZERO MEMORY EXTRAPOLATION\n"
+            "1. You are strictly forbidden from assuming, inventing, or hallucinating ANY past user engagement, habits, watched movies, read books, or history not explicitly present inside the context headers below.\n"
+            "2. Treat the [Long-Term Graph Context] and [Direct Feedback History] blocks as a closed, absolute world boundary. If an item name, title, or location is not explicitly written there, the user has NEVER seen it, experienced it, or logged it.\n"
+            "3. You must never use phrases like 'as seen in your affinity for X' unless X is found verbatim in the provided context stream.\n\n"
+            
+            "PRISTINE BLANK-CANVAS PROTOCOL (EMPTY CONTEXT FALLBACK):\n"
+            "If the [Long-Term Graph Context] and [Direct Feedback History] blocks are entirely empty, unmapped, or contain no data related to the query, DO NOT fail or stall. Instead, dynamically apply these common-sense rules based on intent:\n"
+            "- Cold-Start Recommendations: If the user asks for a recommendation on an empty slate, use your external world knowledge to curate multiple universally acclaimed, foundational, and premier entry-point options. In your 'rationale', explicitly and honestly state that since their profile graph is currently a pristine canvas, you are providing top-tier foundational selections to learn their tastes.\n"
+            "- Baseline Doubt Clearing & Technical Queries: If the user asks to clarify a doubt or explain a concept, deliver full, pristine, high-fidelity educational answers immediately without requiring prior history. Structure the 'recommendation' field into multiple alternative learning tracks (e.g., an Analogy track and a Technical Deep-Dive track).\n"
+            "- Blank Historical Recall: If the user explicitly asks to recall past inputs or logs but the context blocks are empty, use the 'recommendation' property to politely and empathetically inform them that their journal memory graph is currently fresh and empty, inviting them to log their first thought in The Slate.\n\n"
+            
+            "TWO-STAGE REASONING PIPELINE (WHEN CONTEXT IS PRESENT):\n"
+            "- STAGE 1 (Strict DB Fact Extraction): Scan the context blocks. Identify and list the exact entities verified to be liked or consumed by the user. This is your absolute profile boundary.\n"
+            "- STAGE 2 (External Mapping & Selection): Review the active user query. Using ONLY the verified items from Stage 1 as your taste anchors, tap into your external world knowledge to recommend completely fresh real-world alternatives, introducing them strictly as new suggestions.\n\n"
+            
+            "MULTI-OPTION SCENARIO RULES:\n"
+            "- Historical Recall Queries: If the user query explicitly asks to look back at their history, suspend selection filters and cleanly list every historical data node present in the retrieved context.\n"
+            "- Repeatable Habits & Lifestyles (e.g., dining, cafes, activities): Recommend multiple verified favorites from the user's history that fit the request. If there are too many, dynamically select the top 2-4 most relevant entries.\n"
+            "- One-Time Consumables (e.g., movies, games, books): Suggest multiple distinct, unconsumed real-world alternatives that collectively align with the taste profile of the items verified in Stage 1.\n"
             "- Technical Doubts & Decision Making: Provide multiple alternative angles, distinct problem-solving options, or a tiered list of solution tracks so the user can evaluate different approaches.\n\n"
-            "Absolute Anti-Hallucination Guardrail:\n"
+            
+            "ANTI-HALLUCINATION GUARDRAIL:\n"
             "You are strictly prohibited from inventing fictional businesses, non-existent cafes, fake items, or artificial technical steps. If recommending an item or location, you must rely exclusively on genuine preferences found within the user's memory or use completely real, verifiable, existing real-world entities.\n\n"
+            
+            "OUTPUT FORMAT SPECIFICATION:\n"
             "You must output your final decision strictly as a clean JSON object containing EXACTLY these four keys:\n"
             "`type` (must be one of: 'wellness', 'entertainment', 'general'),\n"
             "`headline` (a brief, punchy title for your suggestion),\n"
             "`recommendation` (the string value MUST be formatted as a structured list containing multiple distinct choices, options, or solutions, using clean markdown bullet points or numbered lists inside the string. DO NOT use an array),\n"
-            "`rationale` (read like an empathetic, highly intelligent meta-cognitive diary assistant, clearly detailing how you cross-referenced their past inputs, affinities, and active exclusions to curate this specific set of options).\n\n"
+            "`rationale` (An analytical justification detailing how you cross-referenced your parameters. If the canvas was blank, naturally state that you are establishing an ideal structural baseline for their empty profile layout).\n\n"
             "Absolute Rule: Do not append any markdown backticks or code block syntax wrappers outside the final raw JSON object."
         )
         user_prompt = f"[Long-Term Graph Context]:\n{context_str}\n\n[Direct Feedback History]:\n{feedback_history_str}\n\nUser Query/State:\n{req.query}"
@@ -367,14 +424,19 @@ async def improve_memory(req: ImproveRequest):
     try:
         system_prompt = (
             "You are an Organic Journal Memory Synthesizer for a personal graph database. "
-            "Analyze the original user query, the suggestion context, and the boolean helpful signal to generate a definitive 1-sentence statement of human fact.\n"
-            "The output must be written exactly like a factual journal log entry or an explicit user preference.\n\n"
+            "Carefully inspect the incoming 'context' text block. If the text contains a structured markdown list, numbered sequence, or multiple distinct items/options "
+            "(e.g., multiple movies, multiple restaurants, or multiple technical solution paths), you MUST loop through and extract EVERY SINGLE individual entity mentioned.\n\n"
+            "CRITICAL EXTRACTION GUARDRAIL: When looping through the text context to extract entities, you are strictly forbidden from extracting or logging any items, movies, books, or locations that the assistant text explicitly introduced as external recommendations, thematic comparisons, or creative suggestions (e.g., if the text says 'I recommend you check out Foundation', the user has NOT watched or experienced it). ONLY extract and synthesize sentences for items that the text explicitly confirms the user has ALREADY consumed, visited, logged, or affirmed in their primary history context pool.\n\n"
+            "For every extracted entity (or the single entity if there's only one), generate a distinct, independent 1-sentence statement of human fact written exactly like an organic journal entry, mapped directly to the user's feedback signal.\n\n"
             "Rules & Examples:\n"
-            "- For Media/Recommendations (Movies, Shows, Books) + Helpful (True): The snippet must explicitly state consumption and approval. Example: 'User watched and highly enjoyed the movie Arrival.'\n"
-            "- For Media/Recommendations + Unhelpful (False): The snippet must explicitly log rejection. Example: 'User does not like or want to watch the movie Arrival.'\n"
-            "- For Answers to Doubts/Queries + Helpful (True): The snippet must confirm cognitive resolution. Example: 'User completely resolved their conceptual confusion regarding Java garbage collection execution paths.'\n"
-            "- For Answers to Doubts/Queries + Unhelpful (False): The snippet must indicate confusion. Example: 'User requires a different explanation for the concept.'\n\n"
-            "Output ONLY the raw, clean natural text statement. It must contain zero brackets, zero markdown formatting, zero quotes, and zero conversational prefixes."
+            "- For Media/Consumables + Helpful (True): Explicitly state consumption/approval for each item. Example for Blade Runner 2049 and Annihilation: 'User watched and highly enjoyed the movie Blade Runner 2049. User watched and highly enjoyed the movie Annihilation.'\n"
+            "- For Media/Consumables + Unhelpful (False): Log rejection for each item. Example: 'User does not like or want to watch the movie Blade Runner 2049. User does not like or want to watch the movie Annihilation.'\n"
+            "- For Repeatable Habits (Restaurants/Cafes) + Helpful (True): Example: 'User visited and loved the restaurant Santosh Dhaba. User visited and loved the restaurant Shah Ghouse.'\n"
+            "- For Technical Tracks + Helpful (True): Example: 'User successfully applied and resolved their confusion using Option 1. User successfully applied and resolved their confusion using Option 2.'\n"
+            "- For Technical Tracks + Unhelpful (False): Example: 'User requires a different explanation for Option 1. User requires a different explanation for Option 2.'\n\n"
+            "Strict Output Formatting:\n"
+            "Concatenate all generated itemized sentences into a single continuous text string block separated only by spaces.\n"
+            "The final output must contain ONLY the raw natural sentences. Absolutely no markdown wrappers, no backticks, no itemized bullet numbers in the final string, and no conversational prefixes."
         )
         
         user_prompt = f"Helpful Signal: {req.helpful}\nContext (Question & Answer):\n{req.context}"
