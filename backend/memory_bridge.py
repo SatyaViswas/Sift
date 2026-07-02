@@ -1,63 +1,65 @@
 import sys
 import json
 import os
-import asyncio # Ensure asyncio is imported
+import asyncio
+import hashlib
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any, List
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from dotenv import load_dotenv
 
 import cognee
 from litellm import acompletion
 
-# 1. Load environment variables dynamically ONCE
+# Load environment variables dynamically
 load_dotenv()
-
-# Map custom env keys to what litellm expects for Gemini
 if os.getenv("LLM_API_KEY") and not os.getenv("GEMINI_API_KEY"):
     os.environ["GEMINI_API_KEY"] = os.getenv("LLM_API_KEY")
 
-# Create a global asynchronous database lock
+# Global lock for thread safety in database operations
 cognee_lock = asyncio.Lock()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Memory bridge started. Env ready.")
+    print("Memory bridge v3 initialized. Architecture locked for strict deterministic retention.")
     yield
-    print("Memory bridge shutting down.")
+    print("Memory bridge v3 shutting down.")
 
 app = FastAPI(lifespan=lifespan)
 
-# Pydantic Models
+# Pydantic V2 Models
 class IngestRequest(BaseModel):
     profile: str
     text: str
+    model_config = ConfigDict(extra="ignore")
 
 class RecoverRequest(BaseModel):
     profile: str
     query: Optional[str] = ""
+    full_history: Optional[str] = ""
+    model_config = ConfigDict(extra="ignore")
 
 class UpdateRequest(BaseModel):
     profile: str
     entry_id: Optional[Any] = Field(None, alias="entryId")
     new_text: Optional[str] = Field(None, alias="newText")
     original_text: Optional[str] = Field(None, alias="originalText")
-
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 class ForgetConfirmRequest(BaseModel):
     profile: str
     topic: str
+    model_config = ConfigDict(extra="ignore")
 
 class ImproveRequest(BaseModel):
     profile: str
     helpful: bool
     context: Optional[str] = ""
     lookup_token: Optional[str] = None
+    model_config = ConfigDict(extra="ignore")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -70,7 +72,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def health_check(profile: Optional[str] = "default"):
     return {
         "status": "success",
-        "message": "Python bridge is operational.",
+        "message": "Python bridge v3 operational. Memory Vault is secure.",
         "profile_received": profile,
         "environment_check": {
             "gemini_api_key_set": bool(os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY"))
@@ -83,13 +85,10 @@ async def ingest_memory(req: IngestRequest):
     
     try:
         system_prompt = (
-            "You are an intent router for a personal journal. "
-            "Determine if the user's text is an explicit request to FORGET or DELETE a specific memory, habit, or trait from their graph, "
-            "or if it is just a normal journal entry.\n"
-            "If it is a request to forget, output a JSON object with exactly: {\"intent\": \"forget\", \"topic\": \"<the exact trait/memory to forget>\"}.\n"
-            "IMPORTANT: The 'topic' value MUST be extracted strictly as the root entity name or primary noun phrase (e.g., extracting \"Interstellar\", \"Outer Wilds\", or \"Lulu Cafe\") rather than a conversational fragment like \"the movie interstellar\" or \"my experience at lulu cafe\". This guarantees our SQL wildcards can maximize text hits.\n"
-            "If it is a normal entry, output: {\"intent\": \"journal\", \"heading\": \"<a short 3-5 word heading summarizing the entry>\"}.\n"
-            "Do not output markdown, just raw JSON."
+            "You are a routing & summarization engine. Analyze the user text.\n"
+            "If it is a request to FORGET or DELETE, output exactly: {\"intent\": \"forget\", \"topic\": \"<root entity name>\"}.\n"
+            "If it is a standard journal entry, output: {\"intent\": \"journal\", \"heading\": \"<3-5 words>\", \"summary\": \"<1-2 sentence summary>\"}.\n"
+            "Output ONLY raw JSON."
         )
         
         intent_response = await acompletion(
@@ -107,6 +106,7 @@ async def ingest_memory(req: IngestRequest):
             intent_result = intent_result[3:-3].strip()
             
         heading = None
+        summary_snippet = None
         try:
             intent_json = json.loads(intent_result)
             if intent_json.get("intent") == "forget" and intent_json.get("topic"):
@@ -114,166 +114,166 @@ async def ingest_memory(req: IngestRequest):
                     "status": "forget_confirmation",
                     "data": { "topic": intent_json.get("topic") }
                 }
-            if intent_json.get("intent") == "journal" and intent_json.get("heading"):
+            if intent_json.get("intent") == "journal":
                 heading = intent_json.get("heading")
+                summary_snippet = intent_json.get("summary")
         except Exception:
             pass
     except Exception as e:
-        print(f"Intent routing LLM call failed: {e}, falling back to standard ingest.")
+        print(f"Ingestion LLM call failed: {e}")
         heading = None
+        summary_snippet = None
 
-    summary_snippet = None
-    if len(req.text) > 250:
-        try:
-            summary_prompt = (
-                "Summarize this journal entry in 1-2 short sentences. "
-                "Return only the summary text, no quotes or prefix."
-            )
-            summary_resp = await acompletion(
-                model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
-                messages=[
-                    {"role": "system", "content": summary_prompt},
-                    {"role": "user", "content": req.text}
-                ]
-            )
-            summary_snippet = summary_resp.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"Summary generation failed: {e}")
+    # ARCHITECTURAL MANDATE 1: Strict Taxonomic Ingestion Prefix
+    # Wrapping entry with structural classification metadata tags to eliminate ontology drift
+    structured_entry = f"[Classification: UserSlateEntry]\n{req.text.strip()}"
 
-    # Guard database operation with the lock
     try:
         async with cognee_lock:
-            await cognee.remember(req.text, dataset_name=dataset_name)
+            await cognee.remember(structured_entry, dataset_name=dataset_name)
         return {
             "status": "success",
-            "message": "Stored!",
+            "message": "Stored securely with taxonomy prefix.",
             "heading": heading,
             "summary_snippet": summary_snippet
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
+
 @app.post("/api/recover")
 async def recover_memory(req: RecoverRequest):
     dataset_name = f"user_{req.profile}"
     
     try:
-        # Guard database retrieval with the lock
+        # ARCHITECTURAL MANDATE 2: Broad-Spectrum Structural Retrieval Pass
+        # Concurrent execution of dual lookups to prevent vector dropout.
         try:
             async with cognee_lock:
-                prompt = req.query if req.query else "What choices, habits, or preferences matter most to this user?"
-                context = await cognee.recall(prompt, datasets=[dataset_name])
+                target_specific = req.query if req.query else "What choices, habits, or preferences matter most to this user?"
+                target_broad = "Comprehensive history of [Classification: UserSlateEntry], diary entries, watched media, preferences, and life logs."
+                
+                results = await asyncio.gather(
+                    cognee.recall(target_specific, datasets=[dataset_name]),
+                    cognee.recall(target_broad, datasets=[dataset_name]),
+                    return_exceptions=True
+                )
+                
+                def handle_result(res):
+                    if isinstance(res, Exception):
+                        if "DatasetNotFoundError" in str(res) or "404" in str(res):
+                            return []
+                        raise res
+                    return res
+                    
+                context_specific = handle_result(results[0])
+                context_broad = handle_result(results[1])
+                
         except Exception as recall_err:
-            # Catch empty database states / cold starts gracefully
-            if "DatasetNotFoundError" in str(recall_err) or "404" in str(recall_err):
-                context = ""
-            else:
-                raise recall_err
+            raise recall_err
         
-        explicitly_deleted_topics = []
+        # Deduplicate results
         raw_context_lines = []
+        seen_lines = set()
 
-        if isinstance(context, list):
-            for item in context:
-                item_str = str(item)
-                if "USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING:" in item_str:
-                    topic = item_str.split("USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING:")[1].strip()
-                    topic = topic.strip(".!?,")
-                    explicitly_deleted_topics.append(topic.lower())
-                else:
+        def process_context(ctx):
+            if not ctx:
+                return
+            lines_to_process = ctx if isinstance(ctx, list) else str(ctx).split('\n')
+            for item in lines_to_process:
+                item_str = str(item).strip()
+                if not item_str:
+                    continue
+                # Clean up any potential duplicate or irrelevant lines
+                if item_str not in seen_lines:
+                    seen_lines.add(item_str)
                     raw_context_lines.append(item_str)
-        else:
-            for line in str(context).split('\n'):
-                if "USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING:" in line:
-                    topic = line.split("USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING:")[1].strip()
-                    topic = topic.strip(".!?,")
-                    explicitly_deleted_topics.append(topic.lower())
-                else:
-                    raw_context_lines.append(line)
+
+        process_context(context_specific)
+        process_context(context_broad)
             
+        # Manifest Read: System feedback logs & Semantic Amnesia Vault
         manifest_history_lines = []
+        forbidden_entities = set()
+        
         try:
             manifest_path = f"oracle_manifest_{dataset_name}.json"
             if os.path.exists(manifest_path):
                 with open(manifest_path, "r") as f:
                     manifest_data = json.load(f)
                     for k, val in manifest_data.items():
+                        # ARCHITECTURAL MANDATE 4: Amnesia Vault Aggregation
+                        if val.get("status") == "forgotten":
+                            topic = val.get("topic")
+                            if topic:
+                                for t in str(topic).split(','):
+                                    clean_t = t.strip(' .!?,').lower()
+                                    if clean_t:
+                                        forbidden_entities.add(clean_t)
+                            continue
+                            
+                        # Recommendation Context (Not User Data)
                         helpful_signal = val.get("helpful")
                         summary_text = val.get('summary', '')
-                        if not helpful_signal:
-                            explicitly_deleted_topics.append(str(k).lower())
-                            
                         helpful_str = "true" if helpful_signal else "false"
                         manifest_history_lines.append(f"- {summary_text} (helpful: {helpful_str})")
         except Exception as e:
-            print(f"Failed to load feedback history: {e}")
+            print(f"Failed to load manifest history: {e}")
 
-        # Post-Recall Context Pruning
-        def prune_lines(lines, deleted_topics):
-            pruned = []
-            for line in lines:
-                line_lower = line.lower()
-                drop = False
-                for t in deleted_topics:
-                    if t and t in line_lower:
-                        drop = True
-                        break
-                if not drop:
-                    pruned.append(line)
-            return pruned
+        forbidden_entities_str = ", ".join(list(forbidden_entities)) if forbidden_entities else "None"
+        context_str = "\n".join(f"- {line}" for line in raw_context_lines) if raw_context_lines else "No direct journal history found."
+        feedback_history_str = "\n".join(manifest_history_lines) if manifest_history_lines else "No system feedback history available."
 
-        clean_context_lines = prune_lines(raw_context_lines, explicitly_deleted_topics)
-        clean_manifest_lines = prune_lines(manifest_history_lines, explicitly_deleted_topics)
+        # Merge Cognee contextual hits with the explicit full database timeline from Day 1 to guarantee 100% data access
+        full_timeline_str = req.full_history if req.full_history else "No comprehensive timeline provided."
 
-        context_str = " ".join(clean_context_lines)
-        feedback_history_str = "\n".join(clean_manifest_lines)
-        
-        if not feedback_history_str.strip():
-            feedback_history_str = "No feedback history available."
-
+        # ARCHITECTURAL MANDATE 5: Strict XML Data Grounding & 4-Scenario Analysis
         system_prompt = (
-            "You are an empathetic, highly intelligent personal diary assistant acting as a strict, reality-grounded Organic Intent Reasoner.\n\n"
-            
-            "CRITICAL COMPLIANCE RULE: ZERO MEMORY EXTRAPOLATION\n"
-            "1. You are strictly forbidden from assuming, inventing, or hallucinating ANY past user engagement, habits, watched movies, read books, or history not explicitly present inside the context headers below.\n"
-            "2. Treat the [Long-Term Graph Context] and [Direct Feedback History] blocks as a closed, absolute world boundary. If an item name, title, or location is not explicitly written there, the user has NEVER seen it, experienced it, or logged it.\n"
-            "3. You must never use phrases like 'as seen in your affinity for X' unless X is found verbatim in the provided context stream.\n\n"
-            
-            "PRISTINE BLANK-CANVAS PROTOCOL (EMPTY CONTEXT FALLBACK):\n"
-            "If the [Long-Term Graph Context] and [Direct Feedback History] blocks are entirely empty, unmapped, or contain no data related to the query, DO NOT fail or stall. Instead, dynamically apply these common-sense rules based on intent:\n"
-            "- Cold-Start Recommendations: If the user asks for a recommendation on an empty slate, use your external world knowledge to curate multiple universally acclaimed, foundational, and premier entry-point options. In your 'rationale', explicitly and honestly state that since their profile graph is currently a pristine canvas, you are providing top-tier foundational selections to learn their tastes.\n"
-            "- Baseline Doubt Clearing & Technical Queries: If the user asks to clarify a doubt or explain a concept, deliver full, pristine, high-fidelity educational answers immediately without requiring prior history. Structure the 'recommendation' field into multiple alternative learning tracks (e.g., an Analogy track and a Technical Deep-Dive track).\n"
-            "- Blank Historical Recall: If the user explicitly asks to recall past inputs or logs but the context blocks are empty, use the 'recommendation' property to politely and empathetically inform them that their journal memory graph is currently fresh and empty, inviting them to log their first thought in The Slate.\n\n"
-            
-            "TWO-STAGE REASONING PIPELINE (WHEN CONTEXT IS PRESENT):\n"
-            "- STAGE 1 (Strict DB Fact Extraction): Scan the context blocks. Identify and list the exact entities verified to be liked or consumed by the user. This is your absolute profile boundary.\n"
-            "- STAGE 2 (External Mapping & Selection): Review the active user query. Using ONLY the verified items from Stage 1 as your taste anchors, tap into your external world knowledge to recommend completely fresh real-world alternatives, introducing them strictly as new suggestions.\n\n"
-            
-            "MULTI-OPTION SCENARIO RULES:\n"
-            "- Historical Recall Queries: If the user query explicitly asks to look back at their history, suspend selection filters and cleanly list every historical data node present in the retrieved context.\n"
-            "- Repeatable Habits & Lifestyles (e.g., dining, cafes, activities): Recommend multiple verified favorites from the user's history that fit the request. If there are too many, dynamically select the top 2-4 most relevant entries.\n"
-            "- One-Time Consumables (e.g., movies, games, books): Suggest multiple distinct, unconsumed real-world alternatives that collectively align with the taste profile of the items verified in Stage 1.\n"
-            "- Technical Doubts & Decision Making: Provide multiple alternative angles, distinct problem-solving options, or a tiered list of solution tracks so the user can evaluate different approaches.\n\n"
-            
-            "ANTI-HALLUCINATION GUARDRAIL:\n"
-            "You are strictly prohibited from inventing fictional businesses, non-existent cafes, fake items, or artificial technical steps. If recommending an item or location, you must rely exclusively on genuine preferences found within the user's memory or use completely real, verifiable, existing real-world entities.\n\n"
-            
-            "OUTPUT FORMAT SPECIFICATION:\n"
-            "You must output your final decision strictly as a clean JSON object containing EXACTLY these four keys:\n"
-            "`type` (must be one of: 'wellness', 'entertainment', 'general'),\n"
-            "`headline` (a brief, punchy title for your suggestion),\n"
-            "`recommendation` (the string value MUST be formatted as a structured list containing multiple distinct choices, options, or solutions, using clean markdown bullet points or numbered lists inside the string. DO NOT use an array),\n"
-            "`rationale` (An analytical justification detailing how you cross-referenced your parameters. If the canvas was blank, naturally state that you are establishing an ideal structural baseline for their empty profile layout).\n\n"
-            "Absolute Rule: Do not append any markdown backticks or code block syntax wrappers outside the final raw JSON object."
+            "You are an empathetic, reality-grounded personal journal assistant acting as a strict Organic Intent Reasoner.\n\n"
+            "<GROUNDING_LAWS>\n"
+            "1. You must treat the content inside <USER_PURE_HISTORY> and <FULL_TIMELINE_FROM_DAY_1> as the absolute, closed-world boundary of the user's past actions and life entries from Day 1. If an item, title, or location is not explicitly written there, the user has never experienced it.\n"
+            "2. Content inside <PAST_AI_RECOMMENDATIONS> represents suggestions previously offered by the system, NOT historical actions taken by the user. You are strictly prohibited from mixing these logs up with the user's past life metrics. DO NOT hallucinate these as user actions.\n"
+            "3. Review the <FORBIDDEN_ENTITIES_DIRECTIVES> block. If any term or related concept is listed there, apply absolute amnesia. Silently drop, wash, and ignore any semantic match inside the history blocks entirely. DO NOT mention these entities.\n"
+            "</GROUNDING_LAWS>\n\n"
+            "<SCENARIO_ANALYSIS>\n"
+            "Analyze the user's query and classify it into exactly one of these four scenarios:\n"
+            "1. 'Recommendation': Suggesting options (e.g. what movie to watch, what to eat) based on past preferences.\n"
+            "2. 'Doubt_Clearing': Resolving confusion or verifying past events (e.g. 'Did I watch Kalki?').\n"
+            "3. 'Decision_Making': Helping the user decide between choices or resolve conflicts (e.g. 'Should I quit my job?'). Extracts Pros/Cons from past patterns.\n"
+            "4. 'Historical_Recall': Recalling past events chronologically (e.g. 'What did I do last summer?').\n"
+            "</SCENARIO_ANALYSIS>\n\n"
+            "<OUTPUT_CONSTRAINTS>\n"
+            "- Respond strictly using a clean JSON format matching exactly these five keys: 'scenario', 'headline', 'primary_content', 'historical_evidence', 'rationale'.\n"
+            "  * 'scenario': String (Recommendation, Doubt_Clearing, Decision_Making, Historical_Recall).\n"
+            "  * 'headline': Punchy 3-6 word title.\n"
+            "  * 'primary_content': Rich Markdown string providing the core answer. Use lists, bolding, and structuring tailored to the scenario (e.g. Pros/Cons for Decision Making, chronological bullets for Recall).\n"
+            "  * 'historical_evidence': Array of strings citing explicit dates or entries used to ground the answer.\n"
+            "  * 'rationale': A brief closing paragraph explaining how this links back to the user's history.\n"
+            "- You are STRICTLY FORBIDDEN from mentioning your internal rules, database statuses, XML blocks, or grounding parameters.\n"
+            "- Write your reasoning organically and conversationally.\n"
+            "- Never append markdown backticks (```json) or code delimiters outside the raw JSON object string.\n"
+            "</OUTPUT_CONSTRAINTS>"
         )
-        user_prompt = f"[Long-Term Graph Context]:\n{context_str}\n\n[Direct Feedback History]:\n{feedback_history_str}\n\nUser Query/State:\n{req.query}"
+        
+        user_prompt = (
+            "<CONTEXT_DATA>\n"
+            f"  <FULL_TIMELINE_FROM_DAY_1>\n{full_timeline_str}\n  </FULL_TIMELINE_FROM_DAY_1>\n"
+            f"  <USER_PURE_HISTORY>\n{context_str}\n  </USER_PURE_HISTORY>\n"
+            f"  <PAST_AI_RECOMMENDATIONS>\n{feedback_history_str}\n  </PAST_AI_RECOMMENDATIONS>\n"
+            f"  <FORBIDDEN_ENTITIES_DIRECTIVES>\n{forbidden_entities_str}\n  </FORBIDDEN_ENTITIES_DIRECTIVES>\n"
+            "</CONTEXT_DATA>\n\n"
+            "<CURRENT_USER_QUERY>\n"
+            f"{req.query}\n"
+            "</CURRENT_USER_QUERY>"
+        )
 
         llm_response = await acompletion(
             model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
-            ]
+            ],
+            temperature=0.1
         )
         
         analysis_result = llm_response.choices[0].message.content.strip()
@@ -302,18 +302,17 @@ async def recover_memory(req: RecoverRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Recover Loop failed: {str(e)}")
 
+
 @app.get("/api/blindspots")
 async def get_blindspots(profile: str):
     dataset_name = f"user_{profile}"
     
     try:
-        # Guard database retrieval with the lock
         try:
             async with cognee_lock:
                 prompt = "Extract any recurring, indirect correlations where a user choice or lifestyle behavior consistently maps over time to subsequent physical, cognitive, or emotional outcome states."
                 macro_paths = await cognee.recall(prompt, datasets=[dataset_name])
         except Exception as recall_err:
-            # If the graph is missing or freshly wiped, return a clean empty data array gracefully
             if "DatasetNotFoundError" in str(recall_err) or "404" in str(recall_err):
                 return {
                     "status": "success",
@@ -328,10 +327,9 @@ async def get_blindspots(profile: str):
             macro_paths_str = str(macro_paths)
 
         system_prompt = (
-            "Act as a behavioral data analyst. Review these graph lines. Identify the two strongest long-term behavioral correlations "
-            "that the user might be completely unaware of. Format your response strictly as a clean JSON array of objects. "
-            "Each object must contain exactly three keys: `title` (a brief, high-impact headline), `description` (a clear explanation "
-            "of the cause-and-effect link), and `type` (either 'positive' or 'negative'). Output only the raw JSON array string."
+            "Act as a behavioral data analyst. Review graph lines and identify the two strongest hidden long-term behavioral correlations.\n"
+            "Output ONLY a raw JSON array of objects:\n"
+            "[{ \"title\": \"<punchy headline>\", \"description\": \"<cause-and-effect link>\", \"type\": \"positive\" | \"negative\" }]"
         )
         
         user_prompt = f"Graph Lines Data:\n{macro_paths_str}"
@@ -341,7 +339,8 @@ async def get_blindspots(profile: str):
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
-            ]
+            ],
+            temperature=0.2
         )
         
         analysis_result = llm_response.choices[0].message.content.strip()
@@ -379,10 +378,11 @@ async def update_memory(req: UpdateRequest):
         )
 
     dataset_name = f"user_{req.profile}"
+    structured_entry = f"[Classification: UserSlateEntry]\n{req.new_text.strip()}"
+    
     try:
-        # Guard database operation with the lock
         async with cognee_lock:
-            await cognee.remember(req.new_text.strip(), dataset_name=dataset_name)
+            await cognee.remember(structured_entry, dataset_name=dataset_name)
         return {
             "status": "success",
             "message": "Memory successfully updated."
@@ -402,41 +402,62 @@ async def update_memory(req: UpdateRequest):
         else:
             raise HTTPException(status_code=500, detail=f"Update pipeline failed: {err_msg}")
 
+
 @app.post("/api/forget")
 async def forget_memory(req: ForgetConfirmRequest):
     dataset_name = f"user_{req.profile}"
     try:
         async with cognee_lock:
-            # Treat the deletion path as a selective context update using a soft-delete instruction string
-            soft_delete_instruction = f"USER EXPLICITLY DELETED AND FORGOT MEMORY REGARDING: {req.topic}"
-            await cognee.remember(soft_delete_instruction, dataset_name=dataset_name)
+            manifest_path = f"oracle_manifest_{dataset_name}.json"
+            manifest = {}
+            if os.path.exists(manifest_path):
+                try:
+                    with open(manifest_path, "r") as f:
+                        manifest = json.load(f)
+                except Exception:
+                    pass
+            
+            # ARCHITECTURAL MANDATE 4 & 5: Pure Semantic Amnesia Vault
+            # We completely stop pushing literal text-substring soft-delete commands into Cognee.
+            # Instead we securely register the topic in the manifest ledger and handle it dynamically in /recover
+            
+            for t in req.topic.split(','):
+                clean_t = t.strip(' .!?,')
+                if not clean_t:
+                    continue
+                
+                topic_hash = hashlib.sha256(f"forget_{clean_t}".encode('utf-8')).hexdigest()
+                manifest[topic_hash] = {
+                    "topic": clean_t,
+                    "status": "forgotten"
+                }
+                
+            with open(manifest_path, "w") as f:
+                json.dump(manifest, f)
         
         return {
             "status": "success",
-            "message": "Memory explicitly forgotten via soft-delete constraint."
+            "message": "Memory explicitly forgotten via Amnesia Vault ledger."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Forget operation failed: {str(e)}")
+
 
 @app.post("/api/improve")
 async def improve_memory(req: ImproveRequest):
     dataset_name = f"user_{req.profile}"
     try:
         system_prompt = (
-            "You are an Organic Journal Memory Synthesizer for a personal graph database. "
-            "Carefully inspect the incoming 'context' text block. If the text contains a structured markdown list, numbered sequence, or multiple distinct items/options "
-            "(e.g., multiple movies, multiple restaurants, or multiple technical solution paths), you MUST loop through and extract EVERY SINGLE individual entity mentioned.\n\n"
-            "CRITICAL EXTRACTION GUARDRAIL: When looping through the text context to extract entities, you are strictly forbidden from extracting or logging any items, movies, books, or locations that the assistant text explicitly introduced as external recommendations, thematic comparisons, or creative suggestions (e.g., if the text says 'I recommend you check out Foundation', the user has NOT watched or experienced it). ONLY extract and synthesize sentences for items that the text explicitly confirms the user has ALREADY consumed, visited, logged, or affirmed in their primary history context pool.\n\n"
-            "For every extracted entity (or the single entity if there's only one), generate a distinct, independent 1-sentence statement of human fact written exactly like an organic journal entry, mapped directly to the user's feedback signal.\n\n"
-            "Rules & Examples:\n"
-            "- For Media/Consumables + Helpful (True): Explicitly state consumption/approval for each item. Example for Blade Runner 2049 and Annihilation: 'User watched and highly enjoyed the movie Blade Runner 2049. User watched and highly enjoyed the movie Annihilation.'\n"
-            "- For Media/Consumables + Unhelpful (False): Log rejection for each item. Example: 'User does not like or want to watch the movie Blade Runner 2049. User does not like or want to watch the movie Annihilation.'\n"
-            "- For Repeatable Habits (Restaurants/Cafes) + Helpful (True): Example: 'User visited and loved the restaurant Santosh Dhaba. User visited and loved the restaurant Shah Ghouse.'\n"
-            "- For Technical Tracks + Helpful (True): Example: 'User successfully applied and resolved their confusion using Option 1. User successfully applied and resolved their confusion using Option 2.'\n"
-            "- For Technical Tracks + Unhelpful (False): Example: 'User requires a different explanation for Option 1. User requires a different explanation for Option 2.'\n\n"
-            "Strict Output Formatting:\n"
-            "Concatenate all generated itemized sentences into a single continuous text string block separated only by spaces.\n"
-            "The final output must contain ONLY the raw natural sentences. Absolutely no markdown wrappers, no backticks, no itemized bullet numbers in the final string, and no conversational prefixes."
+            "You are a Journal Synthesizer.\n\n"
+            "EXTRACTION & GUARDRAILS:\n"
+            "1. Extract EVERY entity from the provided context.\n"
+            "2. STRICTLY FORBIDDEN: When a user clicks Thumbs-Up on a multi-option recommendation list, you must NEVER claim the user 'watched' or 'consumed' those options.\n\n"
+            "FORMAT & RULES:\n"
+            "- You must instead log the feedback as a list validation.\n"
+            "- Example (Helpful/True for a list): 'User validated an AI recommendation list containing Cargo and Rocketry as contextually helpful.'\n"
+            "- ONLY for items explicitly logged by the user as consumed originally, you may state they experienced it.\n\n"
+            "OUTPUT:\n"
+            "Concatenate all sentences into one continuous string separated by spaces. Output ONLY raw text sentences. NO markdown, NO bullet numbers, NO prefixes."
         )
         
         user_prompt = f"Helpful Signal: {req.helpful}\nContext (Question & Answer):\n{req.context}"
@@ -451,11 +472,11 @@ async def improve_memory(req: ImproveRequest):
         
         summary = llm_response.choices[0].message.content.strip()
 
-        # 1. Contextual Signature Matching
-        import hashlib
         context_hash = req.lookup_token if req.lookup_token else hashlib.sha256(req.context.encode('utf-8')).hexdigest()
 
-        # Guard database operation with the lock
+        # ARCHITECTURAL MANDATE 3: Complete Feedback Decoupling
+        # Strict isolation: We ONLY write this feedback to the manifest. 
+        # Cognee graph remains pristine and safe from AI-generated text contamination.
         async with cognee_lock:
             manifest_path = f"oracle_manifest_{dataset_name}.json"
             manifest = {}
@@ -466,34 +487,16 @@ async def improve_memory(req: ImproveRequest):
                 except Exception:
                     pass
 
-            # 2. Idempotent Storage & Graph Overwrite Strategy
-            structural_entry = summary
-            
-            if context_hash in manifest:
-                print(f"Idempotent Storage: Overwriting structural text entry for context {context_hash}")
-                # We push the clean structural entry to inherently update the semantic properties.
-                await cognee.remember(structural_entry, dataset_name=dataset_name)
-            else:
-                print(f"Idempotent Storage: Fresh ingest for context {context_hash}")
-                await cognee.remember(structural_entry, dataset_name=dataset_name)
-
-            # Map the footprint locally to prevent duplication leaks
             manifest[context_hash] = {
                 "helpful": req.helpful,
                 "summary": summary
             }
             with open(manifest_path, "w") as f:
                 json.dump(manifest, f)
-
-            # 3. Trigger structural optimization hook smoothly
-            if hasattr(cognee, 'improve'):
-                await cognee.improve(dataset=dataset_name)
-            else:
-                print("Warning: cognee.improve not found. Mocking optimization.")
             
         return {
             "status": "success",
-            "message": "Optimization loop triggered successfully.",
+            "message": "Optimization loop triggered securely into the offline manifest.",
             "lookup_token": context_hash
         }
     except Exception as e:

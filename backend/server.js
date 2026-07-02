@@ -2,12 +2,12 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 5051;
-const FASTAPI_URL = 'http://127.0.0.1:8000';
-
-const crypto = require('crypto');
+// Pointing to the new memory_bridge_3.py FastAPI server which still runs on 8000 by default
+const FASTAPI_URL = 'http://127.0.0.1:8000'; 
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -16,22 +16,22 @@ let supabase = null;
 if (supabaseUrl && supabaseKey) {
     supabase = createClient(supabaseUrl, supabaseKey);
 } else {
-    console.warn("WARNING: Supabase credentials missing. Database operations will fail.");
+    console.warn("WARNING: Supabase credentials missing. Database operations will fail. The system will rely purely on the Python Bridge (Cognee).");
 }
 
-// 1. Global Middleware
+// Global Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 2. Mock Multi-Tenancy Engine
+// Multi-Tenancy Engine Middleware
 app.use((req, res, next) => {
     const profile = req.headers['x-user-profile'] || req.query.user;
     req.userProfile = profile || 'default_user';
     next();
 });
 
-// Helper for fetch proxying
+// Proxy Fetch Helper to forward requests to the Python microservice
 const proxyFetch = async (url, method, body = null) => {
     const options = {
         method,
@@ -48,7 +48,7 @@ const proxyFetch = async (url, method, body = null) => {
             data = await response.json();
         } catch (e) {
             const text = await response.text();
-            throw new Error(`Failed to parse JSON response: ${text}`);
+            throw new Error(`Failed to parse JSON response from Python Bridge: ${text}`);
         }
 
         if (!response.ok) {
@@ -61,25 +61,24 @@ const proxyFetch = async (url, method, body = null) => {
 };
 
 app.get('/', (req, res) => {
-    res.json({ status: 'online', app: 'Sift Backend Engine' });
+    res.json({ status: 'online', app: 'Sift Gateway Engine v2', mode: 'strict_determinism' });
 });
 
-// 4. Base Test Endpoint
 app.get('/api/health', async (req, res) => {
     try {
         const params = new URLSearchParams({ profile: req.userProfile });
         const result = await proxyFetch(`${FASTAPI_URL}/api/health?${params}`, 'GET');
         res.json({
             status: 'success',
-            message: 'Server is healthy and bridge is connected.',
+            message: 'Gateway is healthy and v3 bridge is connected.',
             bridgeResponse: result
         });
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ status: 'error', message: 'Bridge disconnected.', details: error });
     }
 });
 
-// Phase 2: Ingestion Pipeline
+// Gateway Routing: Data Ingestion
 app.post('/api/memory/ingest', async (req, res) => {
     try {
         const { text } = req.body;
@@ -87,18 +86,17 @@ app.post('/api/memory/ingest', async (req, res) => {
             return res.status(400).json({ error: "Missing 'text' in request body." });
         }
 
-        // 1. Call Python Intent Router FIRST
+        // 1. Python Intent Router & Taxonomy Ingestion
         const result = await proxyFetch(`${FASTAPI_URL}/api/ingest`, 'POST', {
             profile: req.userProfile,
             text
         });
 
-        // 2. Halt automatic insertion if intent is a forget request
+        // 2. Forget / Soft Delete Check from Intent
         if (result && result.status === 'forget_confirmation') {
             const topic = result.data?.topic || '';
             
             if (supabase) {
-                // Perform Supabase Parameter Search Bridge
                 const { data, error } = await supabase
                     .from('journal_slates')
                     .select('*')
@@ -109,16 +107,16 @@ app.post('/api/memory/ingest', async (req, res) => {
                     console.error('Supabase Search Error:', error);
                     return res.status(500).json({ status: 'error', message: 'Database error during search.', details: error });
                 }
+                
+                // If no exact UI rows matched, just purge it semantically in the python side vault
                 if (data && data.length === 0) {
-                    console.log(`No records found in Supabase for topic "${topic}". Forwarding soft-delete to Cognee directly.`);
                     const forgetResult = await proxyFetch(`${FASTAPI_URL}/api/forget`, 'POST', {
                         profile: req.userProfile,
-                        topic: topic,
-                        entryIds: []
+                        topic: topic
                     });
                     return res.status(200).json({
                         status: 'success',
-                        message: `No text records found, but memory for "${topic}" was successfully forgotten in the graph.`,
+                        message: `No explicit Supabase rows found, but semantic amnesia vault updated for "${topic}".`,
                         bridgeResponse: forgetResult
                     });
                 }
@@ -129,21 +127,19 @@ app.post('/api/memory/ingest', async (req, res) => {
                     matches: data
                 });
             } else {
-                console.log(`No Supabase instance. Forwarding soft-delete to Cognee directly for topic "${topic}".`);
                 const forgetResult = await proxyFetch(`${FASTAPI_URL}/api/forget`, 'POST', {
                     profile: req.userProfile,
-                    topic: topic,
-                    entryIds: []
+                    topic: topic
                 });
                 return res.status(200).json({
                     status: 'success',
-                    message: `Memory for "${topic}" was successfully forgotten in the graph.`,
+                    message: `Semantic Amnesia Vault locked for "${topic}".`,
                     bridgeResponse: forgetResult
                 });
             }
         }
 
-        // 3. Normal Data Ingestion
+        // 3. Supabase Insert (Standard Journal Flow)
         let databaseRecord = null;
         if (supabase) {
             const payload = { content: text, profile_id: req.userProfile };
@@ -159,18 +155,16 @@ app.post('/api/memory/ingest', async (req, res) => {
                 return res.status(500).json({ status: 'error', message: 'Database error during ingestion.', details: error });
             }
             databaseRecord = data;
-        }
 
-        if (result && result.summary_snippet && databaseRecord && supabase) {
-            const { error: updateError } = await supabase
-                .from('journal_slates')
-                .update({ summary_snippet: result.summary_snippet })
-                .eq('id', databaseRecord.id);
-            
-            if (updateError) {
-                console.error('Supabase Update Summary Error:', updateError);
-            } else {
-                databaseRecord.summary_snippet = result.summary_snippet;
+            if (result && result.summary_snippet && databaseRecord) {
+                const { error: updateError } = await supabase
+                    .from('journal_slates')
+                    .update({ summary_snippet: result.summary_snippet })
+                    .eq('id', databaseRecord.id);
+                
+                if (!updateError) {
+                    databaseRecord.summary_snippet = result.summary_snippet;
+                }
             }
         }
 
@@ -185,14 +179,13 @@ app.post('/api/memory/ingest', async (req, res) => {
     }
 });
 
-// Phase 2B: Timeline Data Fetching
+// Gateway Routing: Timeline (Unchanged essentially, but modernized for safety)
 app.get('/api/memory/timeline', async (req, res) => {
     try {
         if (!supabase) {
-            return res.status(500).json({ error: "Database connection not initialized." });
+            return res.status(500).json({ error: "Supabase connection is not initialized." });
         }
 
-        // FIXED: Condition updated to filter safely against your profile_id field token
         const { data, error } = await supabase
             .from('journal_slates')
             .select('*')
@@ -211,24 +204,43 @@ app.get('/api/memory/timeline', async (req, res) => {
     }
 });
 
-// Phase 3: Oracle Engine
+// Gateway Routing: Oracle Recovery
 app.post('/api/memory/recover', async (req, res) => {
     try {
         const { question, state } = req.body || {};
         const query = question || state || "";
+        
+        let full_history = "";
+        if (supabase) {
+            const { data, error } = await supabase
+                .from('journal_slates')
+                .select('created_at, content')
+                .eq('profile_id', req.userProfile)
+                .order('created_at', { ascending: true }); // Day 1 to present
+
+            if (!error && data) {
+                full_history = data.map(item => `[${new Date(item.created_at).toISOString().split('T')[0]}] ${item.content}`).join('\\n');
+            }
+        }
 
         const result = await proxyFetch(`${FASTAPI_URL}/api/recover`, 'POST', {
             profile: req.userProfile,
-            query
+            query,
+            full_history
         });
         res.status(200).json(result);
     } catch (error) {
         console.error('Oracle Pipeline Error:', error);
-        res.status(500).json({ status: 'error', message: 'Internal server error during recovery lookup.', details: error });
+        // Graceful Degradation: return a structured fail state rather than outright breaking UI
+        res.status(500).json({ 
+            status: 'error', 
+            message: 'The Oracle bridge is temporarily unresponsive. Data remains safe.', 
+            details: error.message || error 
+        });
     }
 });
 
-// Phase 3: Analytics Engine
+// Gateway Routing: Analytics / Blindspots
 app.get('/api/memory/blindspots', async (req, res) => {
     try {
         const params = new URLSearchParams({ profile: req.userProfile });
@@ -240,7 +252,7 @@ app.get('/api/memory/blindspots', async (req, res) => {
     }
 });
 
-// Phase 1 Overhaul: Memory Update Pipeline
+// Gateway Routing: Update Pipeline
 app.put('/api/memory/update', async (req, res) => {
     try {
         const { entryId, originalText, newText } = req.body;
@@ -250,7 +262,6 @@ app.put('/api/memory/update', async (req, res) => {
 
         let databaseRecord = null;
         if (supabase && entryId) {
-            // FIXED: Target updates modified to point to content and filter via profile_id
             const { data, error } = await supabase
                 .from('journal_slates')
                 .update({ content: newText.trim() })
@@ -284,7 +295,7 @@ app.put('/api/memory/update', async (req, res) => {
     }
 });
 
-// Phase 7B: Intentional Forgetting
+// Gateway Routing: Amnesia Action
 app.post('/api/memory/forget', async (req, res) => {
     try {
         const { topic, entryId } = req.body;
@@ -317,11 +328,12 @@ app.post('/api/memory/forget', async (req, res) => {
     }
 });
 
-// Phase 7B: Improve Oracle Recommendations
+// Gateway Routing: Feedback / Improve
 app.post('/api/memory/improve', async (req, res) => {
     try {
         const { helpful, context, lookup_token } = req.body;
-
+        
+        // Use crypto properly for hash generation in JS if token is missing
         const final_token = lookup_token || crypto.createHash('sha256').update(context || "").digest('hex');
 
         const result = await proxyFetch(`${FASTAPI_URL}/api/improve`, 'POST', {
@@ -338,7 +350,7 @@ app.post('/api/memory/improve', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Sift backend running on port ${PORT}`);
+    console.log(`Sift Gateway v2 running on port ${PORT}`);
 });
 
 process.on('unhandledRejection', (reason, promise) => { console.error('Unhandled Rejection:', reason); });

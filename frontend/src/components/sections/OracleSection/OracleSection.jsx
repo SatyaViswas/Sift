@@ -17,6 +17,35 @@ export default function OracleSection() {
   const [safeguardTopic, setSafeguardTopic] = useState(null);
   const inputRef = useRef(null);
 
+  const renderMarkdown = (text) => {
+    if (!text) return null;
+    const lines = text.split('\n');
+    const elements = [];
+    let currentList = [];
+    
+    const flushList = (index) => {
+      if (currentList.length > 0) {
+        elements.push(<ul key={`ul-${index}`} className="oracle-md-ul">{currentList}</ul>);
+        currentList = [];
+      }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        const html = line.substring(2).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        currentList.push(<li key={`li-${i}`} dangerouslySetInnerHTML={{ __html: html }} />);
+      } else {
+        flushList(i);
+        if (line.trim() === '') continue;
+        const html = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        elements.push(<p key={`p-${i}`} className="oracle-md-p" dangerouslySetInnerHTML={{ __html: html }} />);
+      }
+    }
+    flushList(lines.length);
+    return <div className="oracle-md-container">{elements}</div>;
+  };
+
   const { oracleCardsStream, isOracleThinking, sendOracleQuery, submitOracleFeedback, clearOracleChat } = useMemory();
 
   const QUICK_PROMPTS = [
@@ -165,20 +194,32 @@ export default function OracleSection() {
                       <div className="oracle-message__avatar-dot" />
                     </div>
                     
-                    {card.type === 'choice_shield' ? (
-                      /* ── Choice Shield Layout ── */
-                      <div className={`choice-shield choice-shield--${card.answer.type || 'general'} ${card.feedbackStatus ? `choice-shield--${card.feedbackStatus}` : ''} ${card.syncState === 'calibrated' ? 'choice-shield--success' : ''}`}>
+                    {card.type === 'oracle_shield' ? (
+                      /* ── Oracle Shield Layout ── */
+                      <div className={`choice-shield choice-shield--${card.answer.scenario ? card.answer.scenario.toLowerCase() : 'general'} ${card.feedbackStatus ? `choice-shield--${card.feedbackStatus}` : ''} ${card.syncState === 'calibrated' ? 'choice-shield--success' : ''}`}>
                         {card.syncState === 'calibrated' && (
                            <div key={card.feedbackStatus} className="choice-shield__success-indicator">
                              <span>Ontology Aligned</span>
                            </div>
                         )}
                         <div className="choice-shield__header">
-                          <span className="choice-shield__label">{card.answer.type || 'General'} Insight</span>
+                          <span className="choice-shield__label">{card.answer.scenario ? card.answer.scenario.replace('_', ' ') : 'General Insight'}</span>
                           <h3 className="choice-shield__headline">{card.answer.headline}</h3>
                         </div>
                         <div className="choice-shield__body">
-                          <p className="choice-shield__recommendation">{card.answer.recommendation}</p>
+                          <div className="choice-shield__primary-content">
+                            {renderMarkdown(card.answer.primary_content)}
+                          </div>
+                          {card.answer.historical_evidence && card.answer.historical_evidence.length > 0 && (
+                            <div className="choice-shield__evidence">
+                              <strong>Historical Evidence:</strong>
+                              <ul>
+                                {card.answer.historical_evidence.map((ev, idx) => (
+                                  <li key={idx}>{ev}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                         <div className="choice-shield__footer">
                           <p className="choice-shield__rationale">{card.answer.rationale}</p>

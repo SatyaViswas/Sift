@@ -185,12 +185,12 @@ export function MemoryProvider({ children }) {
       
       setOracleCardsStream(prev => prev.map(card => {
         if (card.id === pendingId) {
-          if (result.status === 'success' && result.data && result.data.headline && result.data.recommendation) {
+          if (result.status === 'success' && result.data && result.data.headline && result.data.primary_content) {
             return {
               ...card,
               answer: result.data,
               lookupToken: result.data.headline,
-              type: 'choice_shield'
+              type: 'oracle_shield'
             };
           } else {
             return {
