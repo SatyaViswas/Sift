@@ -1,21 +1,99 @@
-import sys
+from __future__ import annotations
+
+import asyncio
 import json
 import os
-import asyncio
-import hashlib
+import sys
 from contextlib import asynccontextmanager
-from typing import Optional, Dict, Any, List
-
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, ConfigDict
+from pathlib import Path
+from typing import Any, Optional
+from pydantic import BaseModel, ConfigDict
 from dotenv import load_dotenv
 
-import cognee
-from litellm import acompletion
 
-# Load environment variables dynamically
-load_dotenv()
+BACKEND_DIRECTORY = Path(__file__).resolve().parent
+ENV_FILE = BACKEND_DIRECTORY / ".env"
+
+
+def _resolve_path(value: str) -> Path:
+    return Path(value).expanduser().resolve()
+
+
+def configure_cognee_environment() -> dict[str, Path]:
+    """
+    Load backend/.env and create every filesystem parent Cognee requires.
+
+    This function must execute before importing cognee because Cognee caches
+    database configuration during package import.
+    """
+
+    load_dotenv(dotenv_path=ENV_FILE, override=True)
+
+    fallback_root = Path(r"C:\SiftCognee")
+
+    data_path = _resolve_path(
+        os.environ.get(
+            "DATA_ROOT_DIRECTORY",
+            str(fallback_root / "data"),
+        )
+    )
+    system_path = _resolve_path(
+        os.environ.get(
+            "SYSTEM_ROOT_DIRECTORY",
+            str(fallback_root / "system"),
+        )
+    )
+    vector_path = _resolve_path(
+        os.environ.get(
+            "VECTOR_DB_URL",
+            str(fallback_root / "vector"),
+        )
+    )
+
+    databases_path = system_path / "databases"
+    db_name = os.environ.get("DB_NAME", "cognee_db").strip() or "cognee_db"
+    relational_path = databases_path / db_name
+
+    for directory in (
+        data_path,
+        system_path,
+        databases_path,
+        vector_path,
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    os.environ["DATA_ROOT_DIRECTORY"] = data_path.as_posix()
+    os.environ["SYSTEM_ROOT_DIRECTORY"] = system_path.as_posix()
+    os.environ["VECTOR_DB_URL"] = vector_path.as_posix()
+
+    os.environ.setdefault("VECTOR_DB_PROVIDER", "lancedb")
+    os.environ.setdefault("DB_PROVIDER", "sqlite")
+    os.environ.setdefault("DB_NAME", db_name)
+
+    return {
+        "data": data_path,
+        "system": system_path,
+        "databases": databases_path,
+        "vector": vector_path,
+        "relational": relational_path,
+    }
+
+
+STORAGE_PATHS = configure_cognee_environment()
+
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(
+        asyncio.WindowsSelectorEventLoopPolicy()
+    )
+
+
+# Cognee must remain below configure_cognee_environment().
+import cognee  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from litellm import acompletion  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
 if os.getenv("LLM_API_KEY") and not os.getenv("GEMINI_API_KEY"):
     os.environ["GEMINI_API_KEY"] = os.getenv("LLM_API_KEY")
 
