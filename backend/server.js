@@ -81,7 +81,7 @@ app.get('/api/health', async (req, res) => {
 // Gateway Routing: Data Ingestion
 app.post('/api/memory/ingest', async (req, res) => {
     try {
-        const { text } = req.body;
+        const { text, timestamp, isSnippet } = req.body;
         if (!text) {
             return res.status(400).json({ error: "Missing 'text' in request body." });
         }
@@ -89,7 +89,9 @@ app.post('/api/memory/ingest', async (req, res) => {
         // 1. Python Intent Router & Taxonomy Ingestion
         const result = await proxyFetch(`${FASTAPI_URL}/api/ingest`, 'POST', {
             profile: req.userProfile,
-            text
+            text,
+            timestamp,
+            isSnippet
         });
 
         // 2. Forget / Soft Delete Check from Intent
@@ -216,10 +218,11 @@ app.post('/api/memory/recover', async (req, res) => {
                 .from('journal_slates')
                 .select('created_at, content')
                 .eq('profile_id', req.userProfile)
-                .order('created_at', { ascending: true }); // Day 1 to present
+                .order('created_at', { ascending: false })
+                .limit(2000);
 
             if (!error && data) {
-                full_history = data.map(item => `[${new Date(item.created_at).toISOString().split('T')[0]}] ${item.content}`).join('\\n');
+                full_history = data.reverse().map(item => `[${new Date(item.created_at).toISOString().split('T')[0]}] ${item.content}`).join('\n');
             }
         }
 
@@ -243,8 +246,25 @@ app.post('/api/memory/recover', async (req, res) => {
 // Gateway Routing: Analytics / Blindspots
 app.get('/api/memory/blindspots', async (req, res) => {
     try {
-        const params = new URLSearchParams({ profile: req.userProfile });
-        const result = await proxyFetch(`${FASTAPI_URL}/api/blindspots?${params}`, 'GET');
+        let full_history = "";
+        if (supabase) {
+            const { data, error } = await supabase
+                .from('journal_slates')
+                .select('created_at, content')
+                .eq('profile_id', req.userProfile)
+                .order('created_at', { ascending: false })
+                .limit(2000);
+
+            if (!error && data) {
+                full_history = data.reverse().map(item => `[${new Date(item.created_at).toISOString().split('T')[0]}] ${item.content}`).join('\n');
+            }
+        }
+
+        const result = await proxyFetch(`${FASTAPI_URL}/api/blindspots`, 'POST', {
+            profile: req.userProfile,
+            force_refresh: req.query.force_refresh === 'true' || req.query.force_refresh === true,
+            full_history: full_history
+        });
         res.status(200).json(result);
     } catch (error) {
         console.error('Analytics Pipeline Error:', error);

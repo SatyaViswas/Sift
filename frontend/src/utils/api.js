@@ -34,8 +34,9 @@ async function request(method, path, body, profile) {
 }
 
 /** Phase 2 — Ingest a journal entry into memory */
-export async function ingestEntry({ text, profile }) {
-  return request('POST', '/api/memory/ingest', { text }, profile);
+export async function ingestEntry({ text, isSnippet, timestamp, profile }) {
+  const entryTimestamp = timestamp || new Date().toISOString();
+  return request('POST', '/api/memory/ingest', { text, isSnippet, timestamp: entryTimestamp }, profile);
 }
 
 /** Phase 3 — Oracle: semantic recovery query */
@@ -44,8 +45,9 @@ export async function recoverMemory({ question, state, profile }) {
 }
 
 /** Phase 3 — Blindspots: fetch long-term analytics */
-export async function fetchBlindspots({ profile } = {}) {
-  return request('GET', '/api/memory/blindspots', null, profile);
+export async function fetchBlindspots({ profile, force_refresh } = {}) {
+  const path = force_refresh ? '/api/memory/blindspots?force_refresh=true' : '/api/memory/blindspots';
+  return request('GET', path, null, profile);
 }
 
 /** Phase 1 Overhaul — Update an existing journal entry in memory */

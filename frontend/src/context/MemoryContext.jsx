@@ -75,7 +75,8 @@ export function MemoryProvider({ children }) {
   // Network Dispatch: Submit
   const submitMemory = useCallback(async (text, isVoice = false, isSnippet = false, onComplete = null) => {
     try {
-      const result = await ingestEntry({ text });
+      const timestamp = new Date().toISOString();
+      const result = await ingestEntry({ text, isSnippet, timestamp });
       
       // Intercept verification request
       if (result && result.status === 'verification_required') {
