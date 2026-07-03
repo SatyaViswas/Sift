@@ -176,6 +176,26 @@ function VoiceSanctuary({
   onRecordAgain,
   isSubmitting
 }) {
+  const scrollContainerRef = useRef(null);
+  const isAutoScrollEnabled = useRef(true);
+
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    // Allow a small leeway of 10px to consider it "at the bottom"
+    const isAtBottom = scrollHeight - scrollTop - clientHeight <= 10;
+    isAutoScrollEnabled.current = isAtBottom;
+  };
+
+  // Auto-scroll to bottom of the card on new text inputs if user hasn't scrolled up
+  useEffect(() => {
+    if (scrollContainerRef.current && isAutoScrollEnabled.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [draftText, interimText]);
+
+  const hasContent = !!(draftText.trim() || interimText?.trim());
+
   return (
     <div className={`slate-voice-sanctuary ${isReviewMode ? 'slate-voice-sanctuary--review' : ''}`}>
       <button className="slate-voice-sanctuary__close" onClick={onClose} aria-label="Close voice sanctuary">✕</button>
@@ -190,31 +210,39 @@ function VoiceSanctuary({
           />
         </div>
         
-        {isReviewMode ? (
-          <>
-            <p className="slate-voice-sanctuary__transcript">{draftText}</p>
-            <div className="slate-voice-sanctuary__actions">
-              <button 
-                className="slate-voice-sanctuary__btn" 
-                onClick={onRecordAgain}
-                disabled={isSubmitting}
-              >
-                Record Again
-              </button>
-              <button 
-                className="slate-voice-sanctuary__btn slate-voice-sanctuary__btn--primary" 
-                onClick={onSave}
-                disabled={isSubmitting || !draftText.trim()}
-              >
-                {isSubmitting ? 'Saving...' : 'Save to Diary'}
-              </button>
-            </div>
-          </>
-        ) : (
-          <p className="slate-voice-sanctuary__transcript">
-            {draftText}
-            {interimText && <span className="slate-voice-sanctuary__interim"> {interimText}</span>}
-          </p>
+        {/* Premium Scrollable Glass/Paper Transcription Card */}
+        <div className="slate-voice-card">
+          <div className="slate-voice-card__scrollable" ref={scrollContainerRef} onScroll={handleScroll}>
+            {hasContent ? (
+              <p className="slate-voice-sanctuary__transcript">
+                {draftText}
+                {interimText && <span className="slate-voice-sanctuary__interim"> {interimText}</span>}
+              </p>
+            ) : (
+              <p className="slate-voice-card__placeholder">
+                {orbState === 'listening' ? 'Listening... Speak now.' : 'Sanctuary ready. Tap the orb to record.'}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {isReviewMode && (
+          <div className="slate-voice-sanctuary__actions">
+            <button 
+              className="slate-voice-sanctuary__btn" 
+              onClick={onRecordAgain}
+              disabled={isSubmitting}
+            >
+              Record Again
+            </button>
+            <button 
+              className="slate-voice-sanctuary__btn slate-voice-sanctuary__btn--primary" 
+              onClick={onSave}
+              disabled={isSubmitting || !draftText.trim()}
+            >
+              {isSubmitting ? 'Saving...' : 'Save to Diary'}
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -231,76 +259,168 @@ function SlateCard({ entry, formatTime, fadingId, handleEntryClick, handleEntryD
     setIsExpanded(!isExpanded);
   };
 
-  return (
-    <article
-      className={`slate-entry slate-entry--${entry.status} ${entry.isSnippet ? 'slate-entry--snippet' : ''} ${fadingId === entry.id ? 'slate-entry--fading' : ''} ${isExpanded ? 'slate-entry--expanded' : ''}`}
-      onClick={hasSummary ? toggleExpand : undefined}
-      style={{ cursor: hasSummary ? 'pointer' : 'default', transition: 'all 0.3s ease' }}
-    >
-      <div className="slate-entry__body-btn" style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0 }}>
-        <div className="slate-entry__meta">
-          <div className="slate-entry__meta-left">
-            <time className="slate-entry__time" dateTime={entry.timestamp}>{formatTime(entry.timestamp)}</time>
-            <span className="slate-entry__type-badge" aria-hidden="true">{entry.isSnippet ? '⚡ snippet' : '📖 deep'}</span>
+  const isSaved  = entry.status === 'saved';
+  const isFading = fadingId === entry.id;
+
+  /* ── Deep Diary Card ─────────────────────────────────────── */
+  if (!entry.isSnippet) {
+    return (
+      <article
+        className={`sc-deep ${isFading ? 'sc--fading' : ''} ${isExpanded ? 'sc-deep--expanded' : ''}`}
+        onClick={hasSummary ? toggleExpand : undefined}
+        style={{ cursor: hasSummary ? 'pointer' : 'default' }}
+        aria-label="Deep diary entry"
+      >
+        {/* decorative top rule */}
+        <div className="sc-deep__rule" aria-hidden="true" />
+
+        {/* header row */}
+        <div className="sc-deep__header">
+          <div className="sc-deep__header-left">
+            {/* book icon */}
+            <svg className="sc-deep__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+            </svg>
+            <time className="sc-deep__time" dateTime={entry.timestamp}>{formatTime(entry.timestamp)}</time>
+            {entry.isVoice && <span className="sc-deep__voice" aria-label="Voice entry">🎙</span>}
           </div>
-          <div className="slate-entry__badges">
-            {entry.isVoice && <span className="slate-entry__voice-badge" aria-label="Voice entry">🎙</span>}
-            <span className={`slate-entry__status-badge slate-entry__status-badge--${entry.status}`}>
+          <div className="sc-deep__header-right">
+            <span className={`sc-deep__status sc-deep__status--${entry.status}`}>
               {entry.status === 'pending' && '●'}
               {entry.status === 'saved'   && '✓'}
               {entry.status === 'error'   && '✕'}
             </span>
+            <span className="sc-deep__badge">DEEP</span>
           </div>
         </div>
-        
-        {entry.heading && <h3 className="slate-entry__heading">{entry.heading}</h3>}
-        
-        <p className="slate-entry__text" style={{ transition: 'all 0.3s ease' }}>
+
+        {/* heading */}
+        {entry.heading && <h3 className="sc-deep__heading">{entry.heading}</h3>}
+
+        {/* body */}
+        <p className="sc-deep__body">
           {hasSummary && !isExpanded ? entry.summary_snippet : entry.content}
         </p>
 
-        {entry.status === 'saved' && (
-          <div className="slate-entry__actions-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', minHeight: '20px' }}>
-            {hasSummary ? (
-              <span className="slate-entry__expand-hint" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                {isExpanded ? 'Tap to collapse' : 'Tap to expand'}
-              </span>
-            ) : <span />}
+        {/* expand hint */}
+        {hasSummary && isSaved && (
+          <p className="sc-deep__hint" aria-live="polite">
+            {isExpanded ? '↑ Tap to collapse' : '↓ Tap to read entire entry'}
+          </p>
+        )}
+
+        {/* action bar */}
+        {isSaved && (
+          <div className="sc-deep__actions">
             <button
-              className="slate-entry__edit-btn"
+              className="sc-deep__edit-btn"
               onClick={(e) => { e.stopPropagation(); handleEntryClick(entry); }}
               aria-label="Edit entry"
-              style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}
             >
-              <svg viewBox="0 0 24 24" fill="none" width="11" height="11">
+              <svg viewBox="0 0 24 24" fill="none" width="11" height="11" aria-hidden="true">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
               </svg>
               Edit
             </button>
+            <button
+              className="sc-deep__delete-btn"
+              onClick={(e) => { e.stopPropagation(); handleEntryDelete(entry); }}
+              aria-label="Dissolve this memory entry"
+              type="button"
+              title="Dissolve memory"
+            >
+              <svg viewBox="0 0 24 24" fill="none" width="12" height="12" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M9 6V4h6v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </button>
           </div>
         )}
-      </div>
-      
-      {entry.status === 'saved' && (
-        <button
-          className="slate-entry__delete-btn"
-          onClick={(e) => { e.stopPropagation(); handleEntryDelete(entry); }}
-          aria-label="Dissolve this memory entry"
-          type="button"
-          title="Dissolve memory"
-        >
-          <svg viewBox="0 0 24 24" fill="none" width="12" height="12" aria-hidden="true">
-            <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-            <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-            <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-            <path d="M9 6V4h6v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+      </article>
+    );
+  }
+
+  /* ── Quick Snippet Card ───────────────────────────────────── */
+  return (
+    <article
+      className={`sc-snip ${isFading ? 'sc--fading' : ''} ${isExpanded ? 'sc-snip--expanded' : ''}`}
+      onClick={hasSummary ? toggleExpand : undefined}
+      style={{ cursor: hasSummary ? 'pointer' : 'default' }}
+      aria-label="Quick snippet entry"
+    >
+      {/* header row */}
+      <div className="sc-snip__header">
+        <div className="sc-snip__header-left">
+          {/* lightning icon */}
+          <svg className="sc-snip__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M13 2L4.09 12.96A1 1 0 0 0 5 14.5h6.5L11 22l8.91-10.96A1 1 0 0 0 19 9.5H12.5L13 2z"
+              stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-        </button>
+          <time className="sc-snip__time" dateTime={entry.timestamp}>{formatTime(entry.timestamp)}</time>
+          {entry.isVoice && <span className="sc-snip__voice" aria-label="Voice entry">🎙</span>}
+        </div>
+        <div className="sc-snip__header-right">
+          <span className={`sc-snip__status sc-snip__status--${entry.status}`}>
+            {entry.status === 'pending' && '●'}
+            {entry.status === 'saved'   && '✓'}
+            {entry.status === 'error'   && '✕'}
+          </span>
+          <span className="sc-snip__badge">SNIPPET</span>
+        </div>
+      </div>
+
+      {/* body */}
+      <p className="sc-snip__body">
+        {hasSummary && !isExpanded ? entry.summary_snippet : entry.content}
+      </p>
+
+      {/* expand hint */}
+      {hasSummary && isSaved && (
+        <p className="sc-snip__hint" aria-live="polite">
+          {isExpanded ? '↑ Tap to Expand' : '↓ Tap to Collapse'}
+        </p>
+      )}
+
+      {/* footer actions */}
+      {isSaved && (
+        <div className="sc-snip__footer">
+          <div className="sc-snip__actions">
+            <button
+              className="sc-snip__edit-btn"
+              onClick={(e) => { e.stopPropagation(); handleEntryClick(entry); }}
+              aria-label="Edit snippet"
+            >
+              <svg viewBox="0 0 24 24" fill="none" width="11" height="11" aria-hidden="true">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+              Edit
+            </button>
+            <button
+              className="sc-snip__delete-btn"
+              onClick={(e) => { e.stopPropagation(); handleEntryDelete(entry); }}
+              aria-label="Dissolve this snippet"
+              type="button"
+              title="Dissolve memory"
+            >
+              <svg viewBox="0 0 24 24" fill="none" width="11" height="11" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M9 6V4h6v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
       )}
     </article>
   );
 }
+
 
 /* ── Main Component ─────────────────────────────────────────── */
 export default function SlateSection() {
@@ -310,6 +430,8 @@ export default function SlateSection() {
   const entries = journalTimelineStream.filter(
     e => new Date(e.timestamp).toLocaleDateString() === todayKey
   );
+  const snippetEntries = entries.filter(e => e.isSnippet);
+  const deepEntries    = entries.filter(e => !e.isSnippet);
 
   const [activeMode, setActiveMode]   = useState('snippet');
   const [draft, setDraft]             = useState(() => {
@@ -671,34 +793,43 @@ export default function SlateSection() {
       )}
 
       {/* ── Entry Feed ── */}
-      <div className="slate-feed" aria-label="Today's journal entries" aria-live="polite">
-        {entries.length === 0 ? (
-          <div className="slate-feed__empty">
-            <div className="slate-feed__empty-icon" aria-hidden="true">🌿</div>
-            <p className="slate-feed__empty-title">Your slate is clear</p>
-            <p className="slate-feed__empty-body">
-              Capture a quick snippet or start a deep reflection above.
-              Every thought flows to The Oracle from here.
-            </p>
+      {(() => {
+        const activeEntries = activeMode === 'snippet' ? snippetEntries : deepEntries;
+        const modeLabel     = activeMode === 'snippet' ? '⚡ Quick Snippets' : '📖 Deep Diary';
+        const emptyMsg      = activeMode === 'snippet'
+          ? 'No quick snippets yet — type a thought above and press ↵ to capture it.'
+          : 'No deep diary entries yet — start writing above and save your reflection.';
+
+        return (
+          <div className="slate-feed" aria-label="Today's journal entries" aria-live="polite">
+            {activeEntries.length === 0 ? (
+              <div className="slate-feed__empty">
+                <div className="slate-feed__empty-icon" aria-hidden="true">
+                  {activeMode === 'snippet' ? '⚡' : '📖'}
+                </div>
+                <p className="slate-feed__empty-title">Nothing here yet</p>
+                <p className="slate-feed__empty-body">{emptyMsg}</p>
+              </div>
+            ) : (
+              <>
+                <p className="slate-feed__section-label">
+                  {modeLabel} · {activeEntries.length} {activeEntries.length === 1 ? 'entry' : 'entries'}
+                </p>
+                {activeEntries.map(entry => (
+                  <SlateCard
+                    key={entry.id}
+                    entry={entry}
+                    formatTime={formatTime}
+                    fadingId={fadingId}
+                    handleEntryClick={handleEntryClick}
+                    handleEntryDelete={handleEntryDelete}
+                  />
+                ))}
+              </>
+            )}
           </div>
-        ) : (
-          <>
-            <p className="slate-feed__section-label" aria-label="Today's entries">
-              Today · {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
-            </p>
-            {entries.map(entry => (
-              <SlateCard
-                key={entry.id}
-                entry={entry}
-                formatTime={formatTime}
-                fadingId={fadingId}
-                handleEntryClick={handleEntryClick}
-                handleEntryDelete={handleEntryDelete}
-              />
-            ))}
-          </>
-        )}
-      </div>
+        );
+      })()}
 
       {/* ── Voice Sanctuary Overlay ── */}
       {isVoiceSanctuaryOpen && (
