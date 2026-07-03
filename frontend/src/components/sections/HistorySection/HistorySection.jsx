@@ -47,6 +47,14 @@ function buildMonthGrid(year, month) {
   return grid;
 }
 
+function isDateOutsideWeekWindow(date, center, count = 14) {
+  const start = new Date(center);
+  start.setDate(start.getDate() - Math.floor(count / 2));
+  const end = new Date(start);
+  end.setDate(start.getDate() + count - 1);
+  return date < start || date > end;
+}
+
 /* ─── EntryCard ──────────────────────────────────────────────── */
 function EntryCard({ entry, onEdit, onDelete, isFading }) {
   const [hovered, setHovered] = useState(false);
@@ -268,6 +276,12 @@ function WeekCalendar({ selectedDate, onSelectDate, hasEntries }) {
     }
   }, [selectedDate]);
 
+  useEffect(() => {
+    if (isDateOutsideWeekWindow(selectedDate, weekCenter, 14)) {
+      setWeekCenter(new Date(selectedDate));
+    }
+  }, [selectedDate, weekCenter]);
+
   return (
     <div className="hist-week-cal" aria-label="Day selector">
       <button
@@ -324,8 +338,7 @@ function WeekCalendar({ selectedDate, onSelectDate, hasEntries }) {
 
 /* ─── MonthPopover ───────────────────────────────────────────── */
 function MonthPopover({ selectedDate, onSelectDate, onClose }) {
-  const [viewYear, setViewYear] = useState(selectedDate.getFullYear());
-  const [viewMonth, setViewMonth] = useState(selectedDate.getMonth());
+  const [viewDate, setViewDate] = useState(() => new Date(selectedDate));
   const popoverRef = useRef(null);
 
   useEffect(() => {
@@ -337,16 +350,19 @@ function MonthPopover({ selectedDate, onSelectDate, onClose }) {
     return () => { clearTimeout(id); document.removeEventListener('mousedown', handler); };
   }, [onClose]);
 
-  const grid = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
+  const grid = useMemo(() => buildMonthGrid(viewDate.getFullYear(), viewDate.getMonth()), [viewDate]);
   const today = new Date();
   const DAY_ABBR = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
+  useEffect(() => {
+    setViewDate(new Date(selectedDate));
+  }, [selectedDate]);
+
   const shiftMonth = (delta) => {
-    setViewMonth(prev => {
-      let m = prev + delta;
-      if (m < 0)  { setViewYear(y => y - 1); return 11; }
-      if (m > 11) { setViewYear(y => y + 1); return 0;  }
-      return m;
+    setViewDate(prev => {
+      const next = new Date(prev);
+      next.setMonth(next.getMonth() + delta);
+      return next;
     });
   };
 
@@ -362,9 +378,11 @@ function MonthPopover({ selectedDate, onSelectDate, onClose }) {
         <button className="hist-month-popover__arrow" onClick={() => shiftMonth(-1)} aria-label="Previous month">
           <svg viewBox="0 0 24 24" fill="none" width="13" height="13"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
         </button>
+
         <span className="hist-month-popover__title">
-          {new Date(viewYear, viewMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          {viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </span>
+
         <button className="hist-month-popover__arrow" onClick={() => shiftMonth(1)} aria-label="Next month">
           <svg viewBox="0 0 24 24" fill="none" width="13" height="13"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
         </button>
