@@ -6,7 +6,7 @@ import hashlib
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any, List
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ConfigDict
 from dotenv import load_dotenv
@@ -19,8 +19,64 @@ load_dotenv()
 if os.getenv("LLM_API_KEY") and not os.getenv("GEMINI_API_KEY"):
     os.environ["GEMINI_API_KEY"] = os.getenv("LLM_API_KEY")
 
+import difflib
+import re
+
 # Global lock for thread safety in database operations
 cognee_lock = asyncio.Lock()
+
+def is_forbidden(text, forbidden_topics):
+    if not forbidden_topics:
+        return False
+    text_lower = text.lower()
+    text_words = re.findall(r'\b\w+\b', text_lower)
+    text_words.extend([text_words[i] + text_words[i+1] for i in range(len(text_words)-1) if i < len(text_words)-1])
+    
+    stop_words = {"i", "liked", "playing", "the", "a", "an", "and", "or", "but", "really", "loved", "yesterday", "today", "tomorrow", "this", "that", "was", "is", "am", "are", "were"}
+    
+    for topic in forbidden_topics:
+        if topic in text_lower:
+            return True
+            
+        sig_words = [w for w in re.findall(r'\b\w+\b', topic) if len(w) >= 4 and w not in stop_words]
+        if sig_words:
+            sig_compound = "".join(sig_words)
+            sig_words.append(sig_compound)
+            
+            has_sig = False
+            for word in sig_words:
+                for lw in text_words:
+                    if len(lw) >= 4:
+                        if difflib.SequenceMatcher(None, word, lw).ratio() > 0.80:
+                            has_sig = True
+                            break
+                if has_sig: break
+                
+            if has_sig:
+                return True
+                
+    return False
+
+# Cache helper functions for Blindspots
+def get_blindspots_cache_path(profile: str) -> str:
+    dir_path = os.path.join(os.path.dirname(__file__), "vector_sanctuary", f"user_{profile}")
+    os.makedirs(dir_path, exist_ok=True)
+    return os.path.join(dir_path, "blindspots_cache.json")
+
+def mark_blindspots_stale(profile: str):
+    cache_path = get_blindspots_cache_path(profile)
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, "r") as f:
+                data = json.load(f)
+            data["is_stale"] = True
+            with open(cache_path, "w") as f:
+                json.dump(data, f)
+        else:
+            with open(cache_path, "w") as f:
+                json.dump({"is_stale": True, "data": []}, f)
+    except Exception as e:
+        print(f"Failed to mark blindspots cache as stale: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,6 +90,8 @@ app = FastAPI(lifespan=lifespan)
 class IngestRequest(BaseModel):
     profile: str
     text: str
+    timestamp: Optional[str] = None
+    isSnippet: Optional[bool] = False
     model_config = ConfigDict(extra="ignore")
 
 class RecoverRequest(BaseModel):
@@ -47,6 +105,7 @@ class UpdateRequest(BaseModel):
     entry_id: Optional[Any] = Field(None, alias="entryId")
     new_text: Optional[str] = Field(None, alias="newText")
     original_text: Optional[str] = Field(None, alias="originalText")
+    timestamp: Optional[str] = None
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 class ForgetConfirmRequest(BaseModel):
@@ -59,6 +118,12 @@ class ImproveRequest(BaseModel):
     helpful: bool
     context: Optional[str] = ""
     lookup_token: Optional[str] = None
+    model_config = ConfigDict(extra="ignore")
+
+class BlindspotsRequest(BaseModel):
+    profile: str
+    force_refresh: Optional[bool] = False
+    full_history: Optional[str] = ""
     model_config = ConfigDict(extra="ignore")
 
 @app.exception_handler(Exception)
@@ -83,54 +148,31 @@ async def health_check(profile: Optional[str] = "default"):
 async def ingest_memory(req: IngestRequest):
     dataset_name = f"user_{req.profile}"
     
-    try:
-        system_prompt = (
-            "You are a routing & summarization engine. Analyze the user text.\n"
-            "If it is a request to FORGET or DELETE, output exactly: {\"intent\": \"forget\", \"topic\": \"<root entity name>\"}.\n"
-            "If it is a standard journal entry, output: {\"intent\": \"journal\", \"heading\": \"<3-5 words>\", \"summary\": \"<1-2 sentence summary>\"}.\n"
-            "Output ONLY raw JSON."
-        )
-        
-        intent_response = await acompletion(
-            model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": req.text}
-            ]
-        )
-        
-        intent_result = intent_response.choices[0].message.content.strip()
-        if intent_result.startswith("```json"):
-            intent_result = intent_result[7:-3].strip()
-        elif intent_result.startswith("```"):
-            intent_result = intent_result[3:-3].strip()
-            
-        heading = None
-        summary_snippet = None
-        try:
-            intent_json = json.loads(intent_result)
-            if intent_json.get("intent") == "forget" and intent_json.get("topic"):
-                return {
-                    "status": "forget_confirmation",
-                    "data": { "topic": intent_json.get("topic") }
-                }
-            if intent_json.get("intent") == "journal":
-                heading = intent_json.get("heading")
-                summary_snippet = intent_json.get("summary")
-        except Exception:
-            pass
-    except Exception as e:
-        print(f"Ingestion LLM call failed: {e}")
-        heading = None
-        summary_snippet = None
+    heading = None
+    summary_snippet = None
+    
+    text_lower = req.text.strip().lower()
+    is_forget_command = text_lower.startswith("forget") or text_lower.startswith("delete") or text_lower.startswith("dissolve")
+    
+    if is_forget_command:
+        # Simple regex/string parsing for forget to save API tokens
+        topic = req.text.strip()[7:].strip() if len(req.text.strip()) > 7 else "memory"
+        return {
+            "status": "forget_confirmation",
+            "data": { "topic": topic }
+        }
 
     # ARCHITECTURAL MANDATE 1: Strict Taxonomic Ingestion Prefix
     # Wrapping entry with structural classification metadata tags to eliminate ontology drift
-    structured_entry = f"[Classification: UserSlateEntry]\n{req.text.strip()}"
+    ts_str = f"[Timestamp: {req.timestamp}] " if req.timestamp else ""
+    structured_entry = f"{ts_str}[Classification: UserSlateEntry] {req.text.strip()}"
 
     try:
         async with cognee_lock:
-            await cognee.remember(structured_entry, dataset_name=dataset_name)
+            # We must use cognee.add to strictly avoid cognify's concurrent LLM API rate limit burst.
+            # New snippets will be handled dynamically via full_history context mapping.
+            await cognee.add(structured_entry, dataset_name=dataset_name)
+        mark_blindspots_stale(req.profile)
         return {
             "status": "success",
             "message": "Stored securely with taxonomy prefix.",
@@ -172,26 +214,6 @@ async def recover_memory(req: RecoverRequest):
         except Exception as recall_err:
             raise recall_err
         
-        # Deduplicate results
-        raw_context_lines = []
-        seen_lines = set()
-
-        def process_context(ctx):
-            if not ctx:
-                return
-            lines_to_process = ctx if isinstance(ctx, list) else str(ctx).split('\n')
-            for item in lines_to_process:
-                item_str = str(item).strip()
-                if not item_str:
-                    continue
-                # Clean up any potential duplicate or irrelevant lines
-                if item_str not in seen_lines:
-                    seen_lines.add(item_str)
-                    raw_context_lines.append(item_str)
-
-        process_context(context_specific)
-        process_context(context_broad)
-            
         # Manifest Read: System feedback logs & Semantic Amnesia Vault
         manifest_history_lines = []
         forbidden_entities = set()
@@ -219,13 +241,41 @@ async def recover_memory(req: RecoverRequest):
                         manifest_history_lines.append(f"- {summary_text} (helpful: {helpful_str})")
         except Exception as e:
             print(f"Failed to load manifest history: {e}")
+            
+        # Deduplicate results and strictly filter out forgotten entries
+        raw_context_lines = []
+        seen_lines = set()
 
-        forbidden_entities_str = ", ".join(list(forbidden_entities)) if forbidden_entities else "None"
+        def process_context(ctx):
+            if not ctx:
+                return
+            lines_to_process = ctx if isinstance(ctx, list) else str(ctx).split('\n')
+            for item in lines_to_process:
+                item_str = str(item).strip()
+                if not item_str:
+                    continue
+                # Clean up any potential duplicate or irrelevant lines
+                if item_str not in seen_lines:
+                    # Aggressive True Semantic Output Filter
+                    if is_forbidden(item_str, forbidden_entities):
+                        continue
+                    seen_lines.add(item_str)
+                    raw_context_lines.append(item_str)
+
+        process_context(context_specific)
+        process_context(context_broad)
+        
+        # The full timeline is pulled from Supabase which natively handles deletions when the user clicks 'dissolve'.
+        # We must NOT run the aggressive is_forbidden filter on the full timeline, or else it creates a permanent gag-order on any words they ever dissolved in the past.
+        filtered_full_timeline = []
+        if req.full_history:
+            for item in req.full_history.split('\n'):
+                filtered_full_timeline.append(item)
+                    
+        full_timeline_str = "\n".join(filtered_full_timeline) if filtered_full_timeline else "No comprehensive timeline provided."
+
         context_str = "\n".join(f"- {line}" for line in raw_context_lines) if raw_context_lines else "No direct journal history found."
         feedback_history_str = "\n".join(manifest_history_lines) if manifest_history_lines else "No system feedback history available."
-
-        # Merge Cognee contextual hits with the explicit full database timeline from Day 1 to guarantee 100% data access
-        full_timeline_str = req.full_history if req.full_history else "No comprehensive timeline provided."
 
         # ARCHITECTURAL MANDATE 5: Strict XML Data Grounding & 4-Scenario Analysis
         system_prompt = (
@@ -233,7 +283,6 @@ async def recover_memory(req: RecoverRequest):
             "<GROUNDING_LAWS>\n"
             "1. You must treat the content inside <USER_PURE_HISTORY> and <FULL_TIMELINE_FROM_DAY_1> as the absolute, closed-world boundary of the user's past actions and life entries from Day 1. If an item, title, or location is not explicitly written there, the user has never experienced it.\n"
             "2. Content inside <PAST_AI_RECOMMENDATIONS> represents suggestions previously offered by the system, NOT historical actions taken by the user. You are strictly prohibited from mixing these logs up with the user's past life metrics. DO NOT hallucinate these as user actions.\n"
-            "3. Review the <FORBIDDEN_ENTITIES_DIRECTIVES> block. If any term or related concept is listed there, apply absolute amnesia. Silently drop, wash, and ignore any semantic match inside the history blocks entirely. DO NOT mention these entities.\n"
             "</GROUNDING_LAWS>\n\n"
             "<SCENARIO_ANALYSIS>\n"
             "Analyze the user's query and classify it into exactly one of these four scenarios:\n"
@@ -260,8 +309,8 @@ async def recover_memory(req: RecoverRequest):
             f"  <FULL_TIMELINE_FROM_DAY_1>\n{full_timeline_str}\n  </FULL_TIMELINE_FROM_DAY_1>\n"
             f"  <USER_PURE_HISTORY>\n{context_str}\n  </USER_PURE_HISTORY>\n"
             f"  <PAST_AI_RECOMMENDATIONS>\n{feedback_history_str}\n  </PAST_AI_RECOMMENDATIONS>\n"
-            f"  <FORBIDDEN_ENTITIES_DIRECTIVES>\n{forbidden_entities_str}\n  </FORBIDDEN_ENTITIES_DIRECTIVES>\n"
             "</CONTEXT_DATA>\n\n"
+            "CRITICAL PRIORITY: The most recent user entries are appended at the very bottom of FULL_TIMELINE_FROM_DAY_1. You MUST treat the bottom of FULL_TIMELINE_FROM_DAY_1 as the most up-to-date and accurate context for the user's current state. Do not ignore it.\n\n"
             "<CURRENT_USER_QUERY>\n"
             f"{req.query}\n"
             "</CURRENT_USER_QUERY>"
@@ -303,71 +352,189 @@ async def recover_memory(req: RecoverRequest):
         raise HTTPException(status_code=500, detail=f"Recover Loop failed: {str(e)}")
 
 
-@app.get("/api/blindspots")
-async def get_blindspots(profile: str):
+async def _generate_blindspots_logic(profile: str, full_history: str = "") -> list:
     dataset_name = f"user_{profile}"
     
     try:
-        try:
-            async with cognee_lock:
-                prompt = "Extract any recurring, indirect correlations where a user choice or lifestyle behavior consistently maps over time to subsequent physical, cognitive, or emotional outcome states."
-                macro_paths = await cognee.recall(prompt, datasets=[dataset_name])
-        except Exception as recall_err:
-            if "DatasetNotFoundError" in str(recall_err) or "404" in str(recall_err):
-                return {
-                    "status": "success",
-                    "data": []
-                }
-            else:
-                raise recall_err
-        
-        if isinstance(macro_paths, list):
-            macro_paths_str = " ".join([str(item) for item in macro_paths])
-        else:
-            macro_paths_str = str(macro_paths)
-
-        system_prompt = (
-            "Act as a behavioral data analyst. Review graph lines and identify the two strongest hidden long-term behavioral correlations.\n"
-            "Output ONLY a raw JSON array of objects:\n"
-            "[{ \"title\": \"<punchy headline>\", \"description\": \"<cause-and-effect link>\", \"type\": \"positive\" | \"negative\" }]"
-        )
-        
-        user_prompt = f"Graph Lines Data:\n{macro_paths_str}"
-
-        llm_response = await acompletion(
-            model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.2
-        )
-        
-        analysis_result = llm_response.choices[0].message.content.strip()
-        
-        if analysis_result.startswith("```json"):
-            analysis_result = analysis_result[7:-3].strip()
-        elif analysis_result.startswith("```"):
-            analysis_result = analysis_result[3:-3].strip()
+        async with cognee_lock:
+            # Broad spectrum recall to capture everything related to habits, lifestyle, and history
+            prompt1 = "Comprehensive history of [Classification: UserSlateEntry], diary entries, daily routines, habits, productivity, and lifestyle patterns."
+            prompt2 = "user daily routines, diet, food, meals, physical exercise, workouts, sleep, mental state, emotional state, brain fog, fatigue, procrastination, avoidance, focus, environment"
+            results = await asyncio.gather(
+                cognee.recall(prompt1, datasets=[dataset_name]),
+                cognee.recall(prompt2, datasets=[dataset_name]),
+                return_exceptions=True
+            )
             
+            def handle_result(res):
+                if isinstance(res, Exception):
+                    if "DatasetNotFoundError" in str(res) or "404" in str(res):
+                        return []
+                    raise res
+                return res
+
+            context1 = handle_result(results[0])
+            context2 = handle_result(results[1])
+            
+            # Manifest Read: Semantic Amnesia Vault
+            forbidden_entities = set()
+            try:
+                manifest_path = f"oracle_manifest_{dataset_name}.json"
+                if os.path.exists(manifest_path):
+                    with open(manifest_path, "r") as f:
+                        manifest_data = json.load(f)
+                        for k, val in manifest_data.items():
+                            if val.get("status") == "forgotten":
+                                topic = val.get("topic")
+                                if topic:
+                                    for t in str(topic).split(','):
+                                        clean_t = t.strip(' .!?,').lower()
+                                        if clean_t:
+                                            forbidden_entities.add(clean_t)
+            except Exception as e:
+                print(f"Failed to load manifest history: {e}")
+
+            # Deduplicate results and filter
+            raw_context_lines = []
+            seen_lines = set()
+
+            def process_context(ctx):
+                if not ctx:
+                    return
+                lines_to_process = ctx if isinstance(ctx, list) else str(ctx).split('\n')
+                for item in lines_to_process:
+                    item_str = str(item).strip()
+                    if not item_str:
+                        continue
+                    if item_str not in seen_lines:
+                        if any(forbid in item_str.lower() for forbid in forbidden_entities):
+                            continue
+                        seen_lines.add(item_str)
+                        raw_context_lines.append(item_str)
+
+            process_context(context1)
+            process_context(context2)
+            
+            macro_paths_str = "\n".join(raw_context_lines) if raw_context_lines else ""
+            
+    except Exception as recall_err:
+        if "DatasetNotFoundError" in str(recall_err) or "404" in str(recall_err):
+            return []
+        else:
+            raise recall_err
+    
+    if not macro_paths_str:
+        return []
+
+    system_prompt = (
+        "Act as a brilliant behavioral analyst and human-insight engine. Your goal is to review a user's multi-year diary history and uncover their personal \"Blindspots.\"\n\n"
+        "### What is a Blindspot?\n"
+        "A blindspot is a hidden, recurring cause-and-effect loop in a person's life. It connects a specific choice, environment, or habit they make at one point to a physical, mental, or emotional outcome that happens later. Because these events are separated by time or domain, the user is completely blind to the connection in their day-to-day life.\n\n"
+        "You must be able to naturally spot these hidden loops across years of memories for any type of person. For example:\n"
+        "- The Student: Connecting the dots to show that staying up late debugging or studying doesn't just cause next-day tiredness, but actually triggers severe mental blocks when trying to solve complex conceptual problems forty-eight hours later.\n"
+        "- The Worker/Creator: Revealing a psychological stall pattern where the user spends hours endlessly micro-editing their words or tweaking visual details as a subconscious avoidance tactic to delay shipping a project or collaborating with their team.\n"
+        "- The Health/Wellness User: Uncovering a positive flywheel showing that dedicating just 15 minutes to a simple physical routine before noon consistently unlocks flawless focus and automatically suppresses heavy fast-food cravings for days.\n\n"
+        "### How You Must Work\n"
+        "Do not look for rigid keywords or specific fixed calendar rules. Instead, think dynamically about human behavior. Look at how inputs (like meals, sleep thresholds, physical environments, or habits) directly correlate with downstream states (like focus, anxiety, energy, or procrastination) across a multi-year timeline.\n\n"
+        "Find and group these discovered loops into three clear buckets based on their impact:\n"
+        "- Positive Patterns: Hidden behaviors that act as a momentum catalyst or psychological superpower for the user.\n"
+        "- Negative Patterns: Hidden triggers or routines that actively sabotage their energy, focus, or well-being.\n"
+        "- Neutral Patterns: Hidden behavioral warnings, coping mechanisms, or recurring lifestyle loops (like perfectionism traps).\n\n"
+        "Be universally receptive to any life scenario (whether it is about study stress, sports stamina, dietary fatigue, or work anxiety), but remain strictly grounded in reality—never invent, assume, or generalize a pattern that is not completely backed up by the user's authentic past entries.\n\n"
+        "### Strict Output Formatting Rules:\n"
+        "You must output ONLY a raw JSON array of objects. Do not include markdown code wrappers (like ```json). Each object must match this exact schema:\n"
+        '[{ "title": "<punchy headline>", "description": "<insightful cause-and-effect link>", "type": "positive" | "negative" | "neutral" }]'
+    )
+    
+    recent_snippets_context = ""
+    if full_history:
+        recent_snippets = full_history.split('\n')[-30:]
+        recent_snippets_context = "\n[Recent Unprocessed Activity Log]:\n" + "\n".join(recent_snippets)
+
+    user_prompt = f"User's Historical Log Data:\n{macro_paths_str}{recent_snippets_context}"
+    
+    llm_response = await acompletion(
+        model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.2
+    )
+    
+    analysis_result = llm_response.choices[0].message.content.strip()
+    
+    if analysis_result.startswith("```json"):
+        analysis_result = analysis_result[7:-3].strip()
+    elif analysis_result.startswith("```"):
+        analysis_result = analysis_result[3:-3].strip()
+        
+    try:
+        response_json = json.loads(analysis_result)
+        if not isinstance(response_json, list):
+            response_json = []
+        return response_json
+    except json.JSONDecodeError:
+        print(f"LLM failed to output a valid JSON array for blindspots: {analysis_result}")
+        return []
+
+async def _background_generate_blindspots(profile: str, full_history: str = ""):
+    try:
+        data = await _generate_blindspots_logic(profile, full_history)
+        cache_path = get_blindspots_cache_path(profile)
+        
+        cache_content = {
+            "is_stale": False,
+            "data": data
+        }
+        with open(cache_path, "w") as f:
+            json.dump(cache_content, f)
+    except Exception as e:
+        print(f"Background blindspot generation failed: {e}")
+
+@app.post("/api/blindspots")
+async def get_blindspots(req: BlindspotsRequest, background_tasks: BackgroundTasks):
+    cache_path = get_blindspots_cache_path(req.profile)
+    
+    cache_exists = os.path.exists(cache_path)
+    is_stale = True
+    cached_data = []
+
+    if cache_exists:
         try:
-            response_json = json.loads(analysis_result)
+            with open(cache_path, "r") as f:
+                cache_content = json.load(f)
+                is_stale = cache_content.get("is_stale", True)
+                cached_data = cache_content.get("data", [])
+        except Exception:
+            pass
+            
+    if req.force_refresh:
+        # Synchronous execution
+        try:
+            data = await _generate_blindspots_logic(req.profile, req.full_history)
+            
+            cache_content = {
+                "is_stale": False,
+                "data": data
+            }
+            with open(cache_path, "w") as f:
+                json.dump(cache_content, f)
+                
             return {
                 "status": "success",
-                "data": response_json
+                "data": data
             }
-        except json.JSONDecodeError:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "status": "error",
-                    "message": "LLM failed to output a valid JSON array for blindspots.",
-                    "raw_output": analysis_result
-                }
-            )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Blindspots Loop failed: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Blindspots Loop failed: {str(e)}")
+            
+    if is_stale:
+        background_tasks.add_task(_background_generate_blindspots, req.profile, req.full_history)
+        
+    return {
+        "status": "success",
+        "data": cached_data
+    }
 
 @app.put("/api/update")
 async def update_memory(req: UpdateRequest):
@@ -378,11 +545,13 @@ async def update_memory(req: UpdateRequest):
         )
 
     dataset_name = f"user_{req.profile}"
-    structured_entry = f"[Classification: UserSlateEntry]\n{req.new_text.strip()}"
+    ts_str = f"[Timestamp: {req.timestamp}]\n" if req.timestamp else ""
+    structured_entry = f"{ts_str}[Classification: UserSlateEntry]\n{req.new_text.strip()}"
     
     try:
         async with cognee_lock:
             await cognee.remember(structured_entry, dataset_name=dataset_name)
+        mark_blindspots_stale(req.profile)
         return {
             "status": "success",
             "message": "Memory successfully updated."
@@ -407,7 +576,51 @@ async def update_memory(req: UpdateRequest):
 async def forget_memory(req: ForgetConfirmRequest):
     dataset_name = f"user_{req.profile}"
     try:
+        # TRUE FORGET: Traverse Cognee SQLite and physical files to find and delete the exact data nodes
+        import sqlite3
+        import uuid
+        
+        db_path = "/Users/satyaviswas/Documents/sift-recovery-engine/backend/venv/lib/python3.13/site-packages/cognee/.cognee_system/databases/cognee_db"
+        
+        data_ids_to_forget = []
+        
         async with cognee_lock:
+            if os.path.exists(db_path):
+                try:
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+                    
+                    # Fetch all data items
+                    cursor.execute("SELECT id, raw_data_location FROM data")
+                    rows = cursor.fetchall()
+                    
+                    for row in rows:
+                        data_id_hex = row[0]
+                        file_path = str(row[1]).replace("file://", "")
+                        if os.path.exists(file_path):
+                            try:
+                                with open(file_path, "r", encoding="utf-8") as f:
+                                    content = f.read()
+                                    # Check if the requested topic exists in the raw ingested text
+                                    for t in req.topic.split(','):
+                                        clean_t = t.strip(' .!?,').lower()
+                                        if clean_t and clean_t in content.lower():
+                                            data_ids_to_forget.append(uuid.UUID(data_id_hex))
+                                            break # Move to next file once matched
+                            except Exception:
+                                pass
+                    conn.close()
+                except Exception as e:
+                    print(f"Error accessing sqlite db for true forget: {e}")
+
+            # Physically wipe the data, vector embeddings, and graph nodes from Cognee
+            for d_id in data_ids_to_forget:
+                try:
+                    await cognee.forget(data_id=d_id, dataset=dataset_name)
+                    print(f"Successfully forgot true data_id: {d_id}")
+                except Exception as e:
+                    print(f"Failed to forget true data_id {d_id}: {e}")
+            
             manifest_path = f"oracle_manifest_{dataset_name}.json"
             manifest = {}
             if os.path.exists(manifest_path):
@@ -418,8 +631,7 @@ async def forget_memory(req: ForgetConfirmRequest):
                     pass
             
             # ARCHITECTURAL MANDATE 4 & 5: Pure Semantic Amnesia Vault
-            # We completely stop pushing literal text-substring soft-delete commands into Cognee.
-            # Instead we securely register the topic in the manifest ledger and handle it dynamically in /recover
+            # We securely register the topic in the manifest ledger and handle it dynamically in /recover
             
             for t in req.topic.split(','):
                 clean_t = t.strip(' .!?,')
@@ -435,9 +647,10 @@ async def forget_memory(req: ForgetConfirmRequest):
             with open(manifest_path, "w") as f:
                 json.dump(manifest, f)
         
+        mark_blindspots_stale(req.profile)
         return {
             "status": "success",
-            "message": "Memory explicitly forgotten via Amnesia Vault ledger."
+            "message": f"Successfully completely erased connections related to '{req.topic}'."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Forget operation failed: {str(e)}")

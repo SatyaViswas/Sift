@@ -16,13 +16,13 @@ export default function BlindspotSection() {
   const [lastFetched, setLastFetched] = useState(null);
   const [safeguardTopic, setSafeguardTopic] = useState(null);
 
-  const loadInsights = useCallback(async () => {
+  const loadInsights = useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     setEmptyState(false);
     
     try {
-      const result = await fetchBlindspots();
+      const result = await fetchBlindspots({ force_refresh: force });
       
       // Map the phase 6 backend schema: { data: [{ title, description, type }] }
       if (result.status === 'success' && Array.isArray(result.data)) {
@@ -72,7 +72,7 @@ export default function BlindspotSection() {
         <button
           id="blindspot-refresh-btn"
           className="blindspot-refresh-btn"
-          onClick={loadInsights}
+          onClick={() => loadInsights(true)}
           disabled={loading}
           aria-label="Refresh insights"
         >
