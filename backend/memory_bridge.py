@@ -78,11 +78,27 @@ def mark_blindspots_stale(profile: str):
     except Exception as e:
         print(f"Failed to mark blindspots cache as stale: {e}")
 
+async def background_cognify_loop():
+    dataset_name = "user_default_user"
+    while True:
+        try:
+            await asyncio.sleep(1800)  # 30 mins
+            print(f"[Cron] Waking up to process pending knowledge graph data for {dataset_name}...")
+            async with cognee_lock:
+                await cognee.cognify(datasets=[dataset_name])
+            print(f"[Cron] Knowledge graph built successfully.")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[Cron] Error during background cognify: {e}. Will retry next cycle.")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Memory bridge v3 initialized. Architecture locked for strict deterministic retention.")
+    task = asyncio.create_task(background_cognify_loop())
     yield
     print("Memory bridge v3 shutting down.")
+    task.cancel()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -118,6 +134,13 @@ class ImproveRequest(BaseModel):
     helpful: bool
     context: Optional[str] = ""
     lookup_token: Optional[str] = None
+    model_config = ConfigDict(extra="ignore")
+
+class GenerateFeedbackRequest(BaseModel):
+    profile: str
+    helpful: bool
+    context: Optional[str] = ""
+    scenario: Optional[str] = ""
     model_config = ConfigDict(extra="ignore")
 
 class BlindspotsRequest(BaseModel):
@@ -401,7 +424,22 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "") -> li
         return []
     
     if not macro_paths_str:
-        return []
+        macro_paths_str = "No recent timeline data available."
+
+    # Cognee Graph Recall (Deep Semantic History)
+    graph_context_str = ""
+    try:
+        target_blindspots = "Identify all recurring behavioral loops, positive accelerators, negative frictions, and neutral staging blockers in the user's life history."
+        async with cognee_lock:
+            graph_context = await cognee.recall(target_blindspots, datasets=[dataset_name])
+            
+        if graph_context:
+            if isinstance(graph_context, list):
+                graph_context_str = "\n".join(str(c) for c in graph_context)
+            else:
+                graph_context_str = str(graph_context)
+    except Exception as e:
+        print(f"Graph retrieval failed for blindspots: {e}")
 
     system_prompt = (
         "Act as a brilliant behavioral analyst and human-insight engine. Your goal is to review a user's multi-year diary history and uncover their personal \"Blindspots.\"\n\n"
@@ -428,7 +466,10 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "") -> li
         recent_snippets = full_history.split('\n')[-30:]
         recent_snippets_context = "\n[Recent Unprocessed Activity Log]:\n" + "\n".join(recent_snippets)
 
-    user_prompt = f"User's Historical Log Data:\n{macro_paths_str}{recent_snippets_context}"
+    user_prompt = f"User's Recent Historical Log Data:\n{macro_paths_str}{recent_snippets_context}"
+    
+    if graph_context_str:
+        user_prompt += f"\n\nDeep Semantic Graph Insights (Across entire history):\n{graph_context_str}"
     
     llm_response = await acompletion(
         model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
@@ -529,7 +570,7 @@ async def update_memory(req: UpdateRequest):
     
     try:
         async with cognee_lock:
-            await cognee.remember(structured_entry, dataset_name=dataset_name)
+            await cognee.add(structured_entry, dataset_name=dataset_name)
         mark_blindspots_stale(req.profile)
         return {
             "status": "success",
@@ -634,6 +675,44 @@ async def forget_memory(req: ForgetConfirmRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Forget operation failed: {str(e)}")
 
+
+@app.post("/api/generate_feedback")
+async def generate_feedback(req: GenerateFeedbackRequest):
+    try:
+        system_prompt = (
+            "You are a Journal Synthesizer.\n\n"
+            "EXTRACTION & GUARDRAILS:\n"
+            "1. Extract ONLY the core entities/ideas that the Oracle suggested from the context.\n"
+            "2. STRICTLY FORBIDDEN: Do not extract or mention any historical evidence, past actions, or past movies the user already watched. Only focus on the *new* recommendations or decisions provided by the Oracle.\n\n"
+            "FORMAT & RULES:\n"
+            "- You MUST write from a natural, first-person perspective as the user (e.g. \"I found the Oracle's recommendation...\").\n"
+            f"- Scenario Context: This feedback is for a '{req.scenario}' scenario.\n"
+            "- If Helpful=True for Recommendation: \"I liked the Oracle's recommendation for [Items]...\"\n"
+            "- If Helpful=False for Recommendation: \"I didn't find the Oracle's recommendation for [Items] helpful.\"\n"
+            "- If Helpful=True for Decision Making: \"The Oracle helped me think through [Decision/Items]...\"\n"
+            "- If Helpful=False for Decision Making: \"The Oracle's advice on [Decision/Items] wasn't quite right for me.\"\n"
+            "OUTPUT:\n"
+            "Generate EXACTLY ONE continuous sentence. Output ONLY raw text. NO markdown, NO bullet numbers, NO prefixes, NO JSON."
+        )
+        
+        user_prompt = f"Helpful Signal: {req.helpful}\nContext (Question & Answer):\n{req.context}"
+
+        llm_response = await acompletion(
+            model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        
+        summary = llm_response.choices[0].message.content.strip()
+
+        return {
+            "status": "success",
+            "summary": summary
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Generate feedback operation failed: {str(e)}")
 
 @app.post("/api/improve")
 async def improve_memory(req: ImproveRequest):

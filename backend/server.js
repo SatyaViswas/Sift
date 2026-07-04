@@ -348,6 +348,23 @@ app.post('/api/memory/forget', async (req, res) => {
     }
 });
 
+// Gateway Routing: Generate Feedback
+app.post('/api/memory/generate_feedback', async (req, res) => {
+    try {
+        const { helpful, context, scenario } = req.body;
+        const result = await proxyFetch(`${FASTAPI_URL}/api/generate_feedback`, 'POST', {
+            profile: req.userProfile,
+            helpful: !!helpful,
+            context: context || "",
+            scenario: scenario || ""
+        });
+        res.status(200).json(result);
+    } catch (error) {
+        console.error('Generate Feedback Pipeline Error:', error);
+        res.status(500).json({ status: 'error', message: 'Internal server error during generate feedback operation.', details: error });
+    }
+});
+
 // Gateway Routing: Feedback / Improve
 app.post('/api/memory/improve', async (req, res) => {
     try {

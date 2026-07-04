@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { fetchTimeline, ingestEntry, updateEntry, forgetMemory, recoverMemory, improveMemory } from '../utils/api';
+import { fetchTimeline, ingestEntry, updateEntry, forgetMemory, recoverMemory, improveMemory, generateFeedback } from '../utils/api';
 
 const ORACLE_CACHE_KEY = 'sift_oracle_cards_stream';
 
@@ -33,6 +33,16 @@ export function MemoryProvider({ children }) {
     return [];
   });
   const [isOracleThinking, setIsOracleThinking] = useState(false);
+
+  // --- Feedback Modal State ---
+  const [feedbackModalConfig, setFeedbackModalConfig] = useState({
+    isOpen: false,
+    cardId: null,
+    isHelpful: null,
+    generatedText: '',
+    isUpdate: false,
+    originalFeedbackStatus: null
+  });
 
   useEffect(() => {
     localStorage.setItem(ORACLE_CACHE_KEY, JSON.stringify({
@@ -106,9 +116,11 @@ export function MemoryProvider({ children }) {
         });
       }
       if (onComplete) onComplete(result);
+      return result;
     } catch (err) {
       console.error('Background Ingest failed:', err);
       if (onComplete) onComplete({ status: 'error', error: err });
+      throw err;
     }
   }, []);
 
@@ -227,35 +239,163 @@ export function MemoryProvider({ children }) {
     }
   }, [isOracleThinking]);
 
-  const submitOracleFeedback = useCallback(async (cardId, isHelpful, lookupToken) => {
-    const feedbackType = isHelpful ? 'helpful' : 'unhelpful';
-    
+  const generateOracleFeedback = useCallback(async (cardId, isHelpful, lookupToken, scenario) => {
+    const card = oracleCardsStream.find(c => c.id === cardId);
+    const originalStatus = card ? card.feedbackStatus : null;
+
     setOracleCardsStream(prev => prev.map(card => {
       if (card.id === cardId) {
-        return { ...card, feedbackStatus: feedbackType, syncState: 'processing' };
+        return { ...card, feedbackStatus: isHelpful ? 'helpful' : 'unhelpful', syncState: 'processing' };
       }
       return card;
     }));
 
     try {
-      await improveMemory({ helpful: isHelpful, context: lookupToken });
+      const result = await generateFeedback({ helpful: isHelpful, context: lookupToken, scenario });
       
       setOracleCardsStream(prev => prev.map(card => {
         if (card.id === cardId) {
-          return { ...card, syncState: 'calibrated' };
+          // Revert processing state since modal takes over
+          return { ...card, syncState: 'idle' };
         }
         return card;
       }));
+
+      const currentCard = oracleCardsStream.find(c => c.id === cardId);
+      setFeedbackModalConfig({
+        isOpen: true,
+        cardId,
+        isHelpful,
+        generatedText: result.summary || '',
+        isUpdate: !!(currentCard && currentCard.feedbackEntryId),
+        originalFeedbackStatus: originalStatus
+      });
     } catch (err) {
-      console.error('Feedback failed:', err);
+      console.error('Generate feedback failed:', err);
       setOracleCardsStream(prev => prev.map(card => {
         if (card.id === cardId) {
-          return { ...card, feedbackStatus: null, syncState: 'idle' };
+          return { ...card, feedbackStatus: originalStatus, syncState: 'idle' };
         }
         return card;
       }));
     }
+  }, [oracleCardsStream]);
+
+  const cancelOracleFeedback = useCallback(() => {
+    const { cardId, originalFeedbackStatus } = feedbackModalConfig;
+    setFeedbackModalConfig(prev => ({ ...prev, isOpen: false }));
+    
+    if (cardId) {
+      setOracleCardsStream(prev => prev.map(c => {
+        if (c.id === cardId) {
+          return { ...c, feedbackStatus: originalFeedbackStatus, syncState: 'idle' };
+        }
+        return c;
+      }));
+    }
+  }, [feedbackModalConfig]);
+
+  const saveOracleFeedback = useCallback(async (cardId, text) => {
+    const config = feedbackModalConfig;
+    setFeedbackModalConfig({ ...config, isOpen: false });
+
+    setOracleCardsStream(prev => prev.map(card => {
+      if (card.id === cardId) {
+        return { ...card, syncState: 'processing' };
+      }
+      return card;
+    }));
+
+    try {
+      const card = oracleCardsStream.find(c => c.id === cardId);
+      if (!card) return;
+
+      let entryId = card.feedbackEntryId;
+
+      if (config.isUpdate && entryId) {
+        // Update existing memory
+        await updateMemory(entryId, card.feedbackText || '', text);
+      } else {
+        // Ingest new memory
+        const result = await submitMemory(text, false, false);
+        if (result && result.databaseRecord) {
+          entryId = result.databaseRecord.id;
+        }
+      }
+
+      setOracleCardsStream(prev => prev.map(c => {
+        if (c.id === cardId) {
+          return { 
+            ...c, 
+            syncState: 'calibrated',
+            feedbackEntryId: entryId,
+            feedbackText: text
+          };
+        }
+        return c;
+      }));
+    } catch (err) {
+      console.error('Save feedback failed:', err);
+      setOracleCardsStream(prev => prev.map(c => {
+        if (c.id === cardId) {
+          return { ...c, syncState: 'idle' };
+        }
+        return c;
+      }));
+    }
+  }, [feedbackModalConfig, oracleCardsStream, updateMemory, submitMemory]);
+
+  const resetOracleFeedbackUI = useCallback((cardId) => {
+    setOracleCardsStream(prev => prev.map(c => {
+      if (c.id === cardId) {
+        return { 
+          ...c, 
+          feedbackStatus: null,
+          syncState: 'idle',
+          feedbackEntryId: null,
+          feedbackText: null
+        };
+      }
+      return c;
+    }));
   }, []);
+
+  const deleteOracleFeedback = useCallback(async (cardId) => {
+    const card = oracleCardsStream.find(c => c.id === cardId);
+    if (!card || !card.feedbackEntryId) return;
+
+    setOracleCardsStream(prev => prev.map(c => {
+      if (c.id === cardId) {
+        return { ...c, syncState: 'processing' };
+      }
+      return c;
+    }));
+
+    try {
+      await deleteMemory({ id: card.feedbackEntryId, content: card.feedbackText });
+      
+      setOracleCardsStream(prev => prev.map(c => {
+        if (c.id === cardId) {
+          return { 
+            ...c, 
+            feedbackStatus: null,
+            syncState: 'idle',
+            feedbackEntryId: null,
+            feedbackText: null
+          };
+        }
+        return c;
+      }));
+    } catch (err) {
+      console.error('Delete feedback failed:', err);
+      setOracleCardsStream(prev => prev.map(c => {
+        if (c.id === cardId) {
+          return { ...c, syncState: 'calibrated' };
+        }
+        return c;
+      }));
+    }
+  }, [oracleCardsStream, deleteMemory]);
 
   const clearOracleChat = useCallback(() => {
     setOracleCardsStream([]);
@@ -272,7 +412,13 @@ export function MemoryProvider({ children }) {
     oracleCardsStream,
     isOracleThinking,
     sendOracleQuery,
-    submitOracleFeedback,
+    generateOracleFeedback,
+    cancelOracleFeedback,
+    saveOracleFeedback,
+    deleteOracleFeedback,
+    resetOracleFeedbackUI,
+    feedbackModalConfig,
+    setFeedbackModalConfig,
     clearOracleChat,
     forgetVerificationStream,
     setForgetVerificationStream,

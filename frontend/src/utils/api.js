@@ -65,6 +65,11 @@ export async function improveMemory({ helpful, context, profile }) {
   return request('POST', '/api/memory/improve', { helpful, context }, profile);
 }
 
+/** Generate feedback text via LLM */
+export async function generateFeedback({ helpful, context, scenario, profile }) {
+  return request('POST', '/api/memory/generate_feedback', { helpful, context, scenario }, profile);
+}
+
 /** Fetch historical timeline from Supabase */
 export async function fetchTimeline({ profile } = {}) {
   return request('GET', '/api/memory/timeline', null, profile);

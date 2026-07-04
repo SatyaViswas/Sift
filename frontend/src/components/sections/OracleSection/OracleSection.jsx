@@ -15,6 +15,7 @@ import './OracleSection.css';
 export default function OracleSection() {
   const [query, setQuery] = useState('');
   const [safeguardTopic, setSafeguardTopic] = useState(null);
+  const [feedbackDeleteConfig, setFeedbackDeleteConfig] = useState(null);
   const inputRef = useRef(null);
 
   const renderMarkdown = (text) => {
@@ -46,7 +47,7 @@ export default function OracleSection() {
     return <div className="oracle-md-container">{elements}</div>;
   };
 
-  const { oracleCardsStream, isOracleThinking, sendOracleQuery, submitOracleFeedback, clearOracleChat } = useMemory();
+  const { oracleCardsStream, isOracleThinking, sendOracleQuery, generateOracleFeedback, cancelOracleFeedback, saveOracleFeedback, deleteOracleFeedback, resetOracleFeedbackUI, feedbackModalConfig, setFeedbackModalConfig, clearOracleChat } = useMemory();
 
   const QUICK_PROMPTS = [
     "I am fried, what should I do?",
@@ -225,32 +226,43 @@ export default function OracleSection() {
                           <p className="choice-shield__rationale">{card.answer.rationale}</p>
                           
                           <div className="choice-shield__actions">
-                            <div className="choice-shield__feedback">
-                              <button 
-                                className={`choice-shield__btn-feedback ${card.feedbackStatus === 'helpful' ? 'choice-shield__btn-feedback--active' : (card.feedbackStatus ? 'choice-shield__btn-feedback--inactive' : '')} ${card.syncState === 'processing' && card.feedbackStatus === 'helpful' ? 'choice-shield__btn-feedback--calibrating' : ''}`}
-                                onClick={() => submitOracleFeedback(card.id, true, card.lookupToken)}
-                                disabled={card.syncState === 'processing'}
-                                aria-label="Helpful"
-                              >
-                                {card.syncState === 'processing' && card.feedbackStatus === 'helpful' ? <div className="feedback-spinner feedback-spinner--ink-drop" /> : '👍'}
-                              </button>
-                              <button 
-                                className={`choice-shield__btn-feedback ${card.feedbackStatus === 'unhelpful' ? 'choice-shield__btn-feedback--active' : (card.feedbackStatus ? 'choice-shield__btn-feedback--inactive' : '')} ${card.syncState === 'processing' && card.feedbackStatus === 'unhelpful' ? 'choice-shield__btn-feedback--calibrating' : ''}`}
-                                onClick={() => submitOracleFeedback(card.id, false, card.lookupToken)}
-                                disabled={card.syncState === 'processing'}
-                                aria-label="Not helpful"
-                              >
-                                {card.syncState === 'processing' && card.feedbackStatus === 'unhelpful' ? <div className="feedback-spinner feedback-spinner--ink-drop" /> : '👎'}
-                              </button>
-                            </div>
+                            {(card.answer.scenario === 'Recommendation' || card.answer.scenario === 'Decision_Making') && (
+                              <div className="choice-shield__feedback">
+                                <button 
+                                  className={`choice-shield__btn-feedback ${card.feedbackStatus === 'helpful' ? 'choice-shield__btn-feedback--active' : (card.feedbackStatus ? 'choice-shield__btn-feedback--inactive' : '')} ${card.syncState === 'processing' && card.feedbackStatus === 'helpful' ? 'choice-shield__btn-feedback--calibrating' : ''}`}
+                                  onClick={() => generateOracleFeedback(card.id, true, `Headline: ${card.answer.headline}\nContent: ${card.answer.primary_content}`, card.answer.scenario)}
+                                  disabled={card.syncState === 'processing'}
+                                  aria-label="Helpful"
+                                >
+                                  {card.syncState === 'processing' && card.feedbackStatus === 'helpful' ? <div className="feedback-spinner feedback-spinner--ink-drop" /> : '👍'}
+                                </button>
+                                <button 
+                                  className={`choice-shield__btn-feedback ${card.feedbackStatus === 'unhelpful' ? 'choice-shield__btn-feedback--active' : (card.feedbackStatus ? 'choice-shield__btn-feedback--inactive' : '')} ${card.syncState === 'processing' && card.feedbackStatus === 'unhelpful' ? 'choice-shield__btn-feedback--calibrating' : ''}`}
+                                  onClick={() => generateOracleFeedback(card.id, false, `Headline: ${card.answer.headline}\nContent: ${card.answer.primary_content}`, card.answer.scenario)}
+                                  disabled={card.syncState === 'processing'}
+                                  aria-label="Not helpful"
+                                >
+                                  {card.syncState === 'processing' && card.feedbackStatus === 'unhelpful' ? <div className="feedback-spinner feedback-spinner--ink-drop" /> : '👎'}
+                                </button>
+                              </div>
+                            )}
                             
                             {/* Conditional Guardrail for Prune Memory */}
                             <div className={`choice-shield__prune-container ${card.feedbackStatus && card.syncState === 'calibrated' ? 'choice-shield__prune-container--revealed' : ''}`}>
                                 <button 
                                   className="choice-shield__btn-prune"
-                                  onClick={() => setSafeguardTopic(card.answer.headline)}
+                                  onClick={() => {
+                                    if (card.feedbackEntryId) {
+                                      setFeedbackDeleteConfig({
+                                        entry: { id: card.feedbackEntryId, content: card.feedbackText },
+                                        cardId: card.id
+                                      });
+                                    } else {
+                                      setSafeguardTopic(card.answer.headline);
+                                    }
+                                  }}
                                 >
-                                  Prune Memory
+                                  {card.feedbackEntryId ? 'Delete Feedback' : 'Prune Memory'}
                                 </button>
                             </div>
                           </div>
@@ -351,15 +363,72 @@ export default function OracleSection() {
         <p className="oracle-input-zone__hint">Backed by your journal memories</p>
       </div>
 
+      {/* Intentional Forgetting Modal for Oracle Topics */}
       {safeguardTopic && (
         <MemorySafeguardModal 
           topic={safeguardTopic} 
           onClose={() => setSafeguardTopic(null)} 
-          onForgotten={() => {
-            setSafeguardTopic(null);
-            // Optional: visually remove the message or show a toast
-          }} 
         />
+      )}
+
+      {/* Intentional Forgetting Modal for Deleting Feedback */}
+      {feedbackDeleteConfig && (
+        <MemorySafeguardModal 
+          entry={feedbackDeleteConfig.entry} 
+          onClose={() => setFeedbackDeleteConfig(null)}
+          onForgotten={() => {
+            resetOracleFeedbackUI(feedbackDeleteConfig.cardId);
+            setFeedbackDeleteConfig(null);
+          }}
+        />
+      )}
+
+      {feedbackModalConfig.isOpen && (
+        <div className="safeguard-modal-overlay">
+           <div className="safeguard-modal">
+             <div className="safeguard-modal__header">
+               <h2 className="safeguard-modal__title">{feedbackModalConfig.isUpdate ? 'Update Feedback Memory' : 'Save Feedback Memory'}</h2>
+               <p className="safeguard-modal__text">This will be saved to your timeline like a normal journal entry.</p>
+             </div>
+             <div className="safeguard-modal__body">
+               <textarea 
+                 value={feedbackModalConfig.generatedText}
+                 onChange={(e) => setFeedbackModalConfig(prev => ({...prev, generatedText: e.target.value}))}
+                 style={{ 
+                   width: '100%', 
+                   minHeight: '120px', 
+                   background: 'var(--color-bg-base)', 
+                   color: 'var(--color-text-primary)', 
+                   border: '1px solid var(--color-border)', 
+                   padding: '12px', 
+                   borderRadius: 'var(--radius-md)', 
+                   fontSize: 'var(--type-sm)', 
+                   lineHeight: '1.5',
+                   fontFamily: 'inherit',
+                   resize: 'vertical',
+                   outline: 'none',
+                   boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)'
+                 }}
+                 aria-label="Feedback text"
+               />
+             </div>
+             <div className="safeguard-modal__footer">
+               <button 
+                 className="safeguard-modal__btn-cancel" 
+                 onClick={() => cancelOracleFeedback()}
+               >
+                 Cancel
+               </button>
+               <button 
+                 className="safeguard-modal__btn-confirm" 
+                 onClick={() => saveOracleFeedback(feedbackModalConfig.cardId, feedbackModalConfig.generatedText)}
+                 style={{ backgroundColor: 'var(--color-accent-oracle)', color: 'white', borderColor: 'transparent' }}
+               >
+                 {feedbackModalConfig.isUpdate ? 'Update Memory' : 'Save to Timeline'}
+               </button>
+             </div>
+           </div>
+        </div>
       )}
 
     </section>
