@@ -235,25 +235,9 @@ app.post('/api/memory/recover', async (req, res) => {
         const { question, state } = req.body || {};
         const query = question || state || "";
 
-        let full_history = "";
-        const supabase = getSupabase(req);
-        if (supabase) {
-            const { data, error } = await supabase
-                .from('journal_slates')
-                .select('created_at, content')
-                .eq('profile_id', req.userProfile)
-                .order('created_at', { ascending: false })
-                .limit(10000);
-
-            if (!error && data) {
-                full_history = data.reverse().map(item => `[${new Date(item.created_at).toISOString().split('T')[0]}] ${item.content}`).join('\n');
-            }
-        }
-
         const result = await proxyFetch(`${FASTAPI_URL}/api/recover`, 'POST', {
             profile: req.userProfile,
             query,
-            full_history,
             token: req.userToken
         }, req.signal);
         res.status(200).json(result);

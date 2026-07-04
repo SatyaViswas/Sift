@@ -404,13 +404,31 @@ async def recover_memory(req: RecoverRequest):
         process_context(context_specific)
         process_context(context_broad)
         
-        # The full timeline is pulled from Supabase which natively handles deletions when the user clicks 'dissolve'.
-        # We must NOT run the aggressive is_forbidden filter on the full timeline, or else it creates a permanent gag-order on any words they ever dissolved in the past.
+        # NATIVE SUPABASE FETCH (Bypasses Node.js Memory Overhead)
+        # Fetch timeline history natively from Supabase up to 10,000 rows (~15+ years of daily data)
+        # to guarantee 100% Day 1 accuracy without crashing the Render Node.js instance.
         filtered_full_timeline = []
-        if req.full_history:
+        try:
+            sb = get_supabase(req.token)
+            timeline_res = sb.table("journal_slates")\
+                .select("created_at, content")\
+                .eq("profile_id", req.profile)\
+                .order("created_at", desc=True)\
+                .limit(10000)\
+                .execute()
+                
+            if timeline_res.data:
+                for item in reversed(timeline_res.data):
+                    date_str = item["created_at"].split("T")[0]
+                    filtered_full_timeline.append(f"[{date_str}] {item['content']}")
+        except Exception as e:
+            print(f"Native Supabase timeline fetch failed: {e}")
+            
+        # Fallback to req.full_history if passed by legacy routes (e.g. blindspots)
+        if not filtered_full_timeline and req.full_history:
             for item in req.full_history.split('\n'):
                 filtered_full_timeline.append(item)
-                    
+
         full_timeline_str = "\n".join(filtered_full_timeline) if filtered_full_timeline else "No comprehensive timeline provided."
 
         context_str = "\n".join(f"- {line}" for line in raw_context_lines) if raw_context_lines else "No direct journal history found."
