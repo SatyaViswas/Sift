@@ -128,9 +128,12 @@ def mark_blindspots_stale(profile: str, token: str = None):
         print(f"Failed to mark blindspots cache as stale: {e}")
 
 # Async Background Task for Cloud Graph Building
-async def trigger_cloud_cognify(dataset_name: str):
-    print(f"Triggering asynchronous cloud graph build for {dataset_name}...")
+async def trigger_cloud_cognify(structured_entry: str, dataset_name: str, profile: str, token: str):
+    print(f"Triggering asynchronous cloud ingest and graph build for {dataset_name}...")
     try:
+        if structured_entry:
+            await cognee.add(structured_entry, dataset_name=dataset_name)
+            mark_blindspots_stale(profile, token)
         await cognee.cognify(datasets=[dataset_name])
         print(f"Successfully cognified {dataset_name} on cloud.")
     except Exception as e:
@@ -295,12 +298,8 @@ async def ingest_memory(req: IngestRequest, background_tasks: BackgroundTasks):
         }
 
     try:
-        # Push to Cognee Cloud instantly
-        await cognee.add(structured_entry, dataset_name=dataset_name)
-        mark_blindspots_stale(req.profile, req.token)
-        
-        # Trigger graph building immediately in the background without blocking the user
-        background_tasks.add_task(trigger_cloud_cognify, dataset_name)
+        # Trigger ingestion and graph building immediately in the background without blocking the user
+        background_tasks.add_task(trigger_cloud_cognify, structured_entry, dataset_name, req.profile, req.token)
         
         return {
             "status": "success",
@@ -602,7 +601,7 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "", token
 async def _background_generate_blindspots(profile: str, full_history: str = ""):
     try:
         data = await _generate_blindspots_logic(profile, full_history)
-        last_synced = datetime.datetime.now().isoformat()
+        last_synced = datetime.datetime.now(datetime.timezone.utc).isoformat()
         save_blindspots_cache(profile, data, False, last_synced)
     except Exception as e:
         print(f"Background blindspot generation failed: {e}")
@@ -617,7 +616,7 @@ async def get_blindspots(req: BlindspotsRequest, background_tasks: BackgroundTas
         try:
             data = await _generate_blindspots_logic(req.profile, req.full_history, req.token)
             
-            last_synced = datetime.datetime.now().isoformat()
+            last_synced = datetime.datetime.now(datetime.timezone.utc).isoformat()
             save_blindspots_cache(req.profile, data, False, last_synced, req.token)
                 
             return {

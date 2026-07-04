@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { fetchBlindspots } from '../../../utils/api';
+import { useState, useEffect } from 'react';
+import { useMemory } from '../../../context/MemoryContext';
 import MemorySafeguardModal from '../../MemorySafeguardModal/MemorySafeguardModal';
 import './BlindspotSection.css';
 
@@ -9,53 +9,42 @@ import './BlindspotSection.css';
  * Handles 404 Empty State gracefully.
  */
 export default function BlindspotSection() {
-  const [insights, setInsights]   = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
-  const [emptyState, setEmptyState] = useState(false);
-  const [lastFetched, setLastFetched] = useState(null);
+  const { blindspotsData, isBlindspotsLoading: loading, refreshBlindspots } = useMemory();
   const [safeguardTopic, setSafeguardTopic] = useState(null);
-
-  const loadInsights = useCallback(async (force = false) => {
-    setLoading(true);
-    setError(null);
-    setEmptyState(false);
-    
-    try {
-      const result = await fetchBlindspots({ force_refresh: force });
-      
-      // Map the phase 6 backend schema: { data: [{ title, description, type }] }
-      if (result.status === 'success' && Array.isArray(result.data)) {
-        setInsights(result.data);
-      } else {
-        // Fallback for demo format if backend hasn't updated
-        setInsights(result.blindspots || result.patterns || result.insights || []);
-      }
-      
-      if (result.last_synced) {
-        setLastFetched(new Date(result.last_synced));
-      } else {
-        setLastFetched(new Date());
-      }
-    } catch (err) {
-      console.error('Blindspots fetch failed:', err);
-      
-      if (err.message && err.message.includes('404')) {
-        setEmptyState(true);
-        setInsights([]);
-      } else {
-        setError('Could not load insights. Backend may be offline.');
-        // Don't auto-fallback to demo data in prod, but keeping it available if needed.
-        // setInsights(DEMO_INSIGHTS);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [localInsights, setLocalInsights] = useState(null); // to allow manual filtering of dissolved items
 
   useEffect(() => {
-    loadInsights();
-  }, [loadInsights]);
+    if (!blindspotsData && !loading) {
+      refreshBlindspots();
+    }
+  }, [blindspotsData, loading, refreshBlindspots]);
+
+  let insights = [];
+  let emptyState = false;
+  let lastFetched = null;
+  let error = null;
+
+  if (blindspotsData) {
+    if (blindspotsData.status === 'success' && Array.isArray(blindspotsData.data)) {
+      insights = blindspotsData.data;
+    } else {
+      insights = blindspotsData.blindspots || blindspotsData.patterns || blindspotsData.insights || [];
+    }
+    if (blindspotsData.last_synced) {
+      lastFetched = new Date(blindspotsData.last_synced);
+    } else {
+      lastFetched = new Date();
+    }
+  }
+
+  // Allow local removal of insights without refetching immediately
+  useEffect(() => {
+    if (insights.length > 0) {
+      setLocalInsights(insights);
+    }
+  }, [insights]);
+  
+  const displayInsights = localInsights || insights;
 
   const getSentimentColor = (type) => {
     if (!type) return 'neutral';
@@ -77,7 +66,7 @@ export default function BlindspotSection() {
         <button
           id="blindspot-refresh-btn"
           className="blindspot-refresh-btn"
-          onClick={() => loadInsights(true)}
+          onClick={() => refreshBlindspots(true)}
           disabled={loading}
           aria-label="Refresh insights"
         >
@@ -94,16 +83,16 @@ export default function BlindspotSection() {
       </div>
 
       {/* ── Stats Bar ── */}
-      {!loading && insights.length > 0 && (
+      {!loading && displayInsights.length > 0 && (
         <div className="blindspot-stats" aria-label="Summary statistics">
           <div className="blindspot-stat">
-            <span className="blindspot-stat__num">{insights.length}</span>
+            <span className="blindspot-stat__num">{displayInsights.length}</span>
             <span className="blindspot-stat__label">patterns</span>
           </div>
           <div className="blindspot-stat__divider" aria-hidden="true" />
           <div className="blindspot-stat">
             <span className="blindspot-stat__num">
-              {insights.filter(i => i.type?.toLowerCase() === 'positive').length}
+              {displayInsights.filter(i => i.type?.toLowerCase() === 'positive').length}
             </span>
             <span className="blindspot-stat__label">positive</span>
           </div>
@@ -121,7 +110,6 @@ export default function BlindspotSection() {
       {error && (
         <div className="blindspot-error" role="alert">
           <span>⚠ {error}</span>
-          <button className="blindspot-error__action" onClick={() => setInsights(DEMO_INSIGHTS)}>Load Demo Data</button>
         </div>
       )}
 
@@ -146,7 +134,7 @@ export default function BlindspotSection() {
               Keep logging your thoughts in The Slate, and check back soon.
             </p>
           </div>
-        ) : insights.length === 0 ? (
+        ) : displayInsights.length === 0 ? (
           <div className="blindspot-empty">
             <div className="blindspot-empty__icon" aria-hidden="true">🧠</div>
             <p className="blindspot-empty__title">No patterns detected yet</p>
@@ -156,7 +144,7 @@ export default function BlindspotSection() {
             </p>
           </div>
         ) : (
-          insights.map((insight, i) => (
+          displayInsights.map((insight, i) => (
             <article
               key={i}
               className={`blindspot-card blindspot-card--${getSentimentColor(insight.type)}`}
@@ -204,8 +192,9 @@ export default function BlindspotSection() {
           onClose={() => setSafeguardTopic(null)} 
           onForgotten={() => {
             setSafeguardTopic(null);
-            // Re-fetch or manually remove from state
-            setInsights(prev => prev.filter(i => (i.title || i.pattern) !== safeguardTopic));
+            if (localInsights) {
+              setLocalInsights(prev => prev.filter(i => (i.title || i.pattern) !== safeguardTopic));
+            }
           }} 
         />
       )}

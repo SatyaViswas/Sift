@@ -13,7 +13,23 @@ import './OracleSection.css';
  */
 
 export default function OracleSection() {
-  const [query, setQuery] = useState('');
+  const { 
+    oracleCardsStream, 
+    isOracleThinking, 
+    sendOracleQuery, 
+    generateOracleFeedback, 
+    cancelOracleFeedback, 
+    saveOracleFeedback, 
+    deleteOracleFeedback, 
+    resetOracleFeedbackUI, 
+    feedbackModalConfig, 
+    setFeedbackModalConfig, 
+    clearOracleChat,
+    oracleInputValue: query,
+    setOracleInputValue: setQuery,
+    cancelOracleQuery
+  } = useMemory();
+
   const [safeguardTopic, setSafeguardTopic] = useState(null);
   const [feedbackDeleteConfig, setFeedbackDeleteConfig] = useState(null);
   const inputRef = useRef(null);
@@ -47,7 +63,7 @@ export default function OracleSection() {
     return <div className="oracle-md-container">{elements}</div>;
   };
 
-  const { oracleCardsStream, isOracleThinking, sendOracleQuery, generateOracleFeedback, cancelOracleFeedback, saveOracleFeedback, deleteOracleFeedback, resetOracleFeedbackUI, feedbackModalConfig, setFeedbackModalConfig, clearOracleChat } = useMemory();
+  };
 
   const QUICK_PROMPTS = [
     "I am fried, what should I do?",
@@ -351,12 +367,21 @@ export default function OracleSection() {
           <button
             id="oracle-send-btn"
             className="oracle-input-bar__send"
-            onClick={() => sendQuery()}
-            disabled={(!query.trim() && !interimText.trim()) || isOracleThinking}
-            aria-label="Send query to Oracle"
+            onClick={() => {
+              if (isOracleThinking) {
+                cancelOracleQuery();
+              } else {
+                sendQuery();
+              }
+            }}
+            disabled={(!query.trim() && !interimText.trim() && !isOracleThinking)}
+            aria-label={isOracleThinking ? "Stop generating" : "Send query to Oracle"}
+            style={isOracleThinking ? { color: 'var(--color-text-danger)' } : {}}
           >
             {isOracleThinking ? (
-              <div className="oracle-input-bar__spinner" aria-hidden="true" />
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
             ) : (
               <svg viewBox="0 0 24 24" fill="none" width="18" height="18" aria-hidden="true">
                 <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>

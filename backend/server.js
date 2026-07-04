@@ -41,13 +41,16 @@ app.use((req, res, next) => {
 });
 
 // Proxy Fetch Helper to forward requests to the Python microservice
-const proxyFetch = async (url, method, body = null) => {
+const proxyFetch = async (url, method, body = null, signal = null) => {
     const options = {
         method,
         headers: { 'Content-Type': 'application/json' },
     };
     if (body) {
         options.body = JSON.stringify(body);
+    }
+    if (signal) {
+        options.signal = signal;
     }
 
     try {
@@ -240,7 +243,7 @@ app.post('/api/memory/recover', async (req, res) => {
                 .select('created_at, content')
                 .eq('profile_id', req.userProfile)
                 .order('created_at', { ascending: false })
-                .limit(2000);
+                .limit(30);
 
             if (!error && data) {
                 full_history = data.reverse().map(item => `[${new Date(item.created_at).toISOString().split('T')[0]}] ${item.content}`).join('\n');
@@ -252,7 +255,7 @@ app.post('/api/memory/recover', async (req, res) => {
             query,
             full_history,
             token: req.userToken
-        });
+        }, req.signal);
         res.status(200).json(result);
     } catch (error) {
         console.error('Oracle Pipeline Error:', error);

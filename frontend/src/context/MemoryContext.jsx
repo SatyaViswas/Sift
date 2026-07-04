@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { fetchTimeline, ingestEntry, updateEntry, forgetMemory, recoverMemory, improveMemory, generateFeedback } from '../utils/api';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { fetchTimeline, ingestEntry, updateEntry, forgetMemory, recoverMemory, improveMemory, generateFeedback, fetchBlindspots } from '../utils/api';
 import { useAuth } from './AuthContext';
 
 const ORACLE_CACHE_KEY = 'sift_oracle_cards_stream';
@@ -35,6 +35,14 @@ export function MemoryProvider({ children }) {
     return [];
   });
   const [isOracleThinking, setIsOracleThinking] = useState(false);
+  const [oracleInputValue, setOracleInputValue] = useState(() => {
+    return localStorage.getItem('sift_oracle_input') || '';
+  });
+  const oracleAbortControllerRef = useRef(null);
+
+  // --- Blindspots State ---
+  const [blindspotsData, setBlindspotsData] = useState(null);
+  const [isBlindspotsLoading, setIsBlindspotsLoading] = useState(false);
 
   // --- Feedback Modal State ---
   const [feedbackModalConfig, setFeedbackModalConfig] = useState({
@@ -52,6 +60,10 @@ export function MemoryProvider({ children }) {
       cards: oracleCardsStream
     }));
   }, [oracleCardsStream]);
+
+  useEffect(() => {
+    localStorage.setItem('sift_oracle_input', oracleInputValue);
+  }, [oracleInputValue]);
 
   const loadTimeline = useCallback(async () => {
     setIsLoading(true);
@@ -210,8 +222,10 @@ export function MemoryProvider({ children }) {
     
     setOracleCardsStream(prev => [...prev, newCard]);
 
+    oracleAbortControllerRef.current = new AbortController();
+
     try {
-      const result = await recoverMemory({ question: queryText });
+      const result = await recoverMemory({ question: queryText, signal: oracleAbortControllerRef.current.signal });
       
       setOracleCardsStream(prev => prev.map(card => {
         if (card.id === pendingId) {
@@ -253,8 +267,29 @@ export function MemoryProvider({ children }) {
       }));
     } finally {
       setIsOracleThinking(false);
+      oracleAbortControllerRef.current = null;
     }
   }, [isOracleThinking]);
+
+  const cancelOracleQuery = useCallback(() => {
+    if (oracleAbortControllerRef.current) {
+      oracleAbortControllerRef.current.abort();
+      oracleAbortControllerRef.current = null;
+      setIsOracleThinking(false);
+      
+      // Remove or mark the pending card as cancelled
+      setOracleCardsStream(prev => prev.map(card => {
+        if (card.type === 'pending') {
+          return {
+            ...card,
+            answer: { text: "Query stopped.", isError: true },
+            type: 'text'
+          };
+        }
+        return card;
+      }));
+    }
+  }, []);
 
   const generateOracleFeedback = useCallback(async (cardId, isHelpful, lookupToken, scenario) => {
     const card = oracleCardsStream.find(c => c.id === cardId);
@@ -418,6 +453,21 @@ export function MemoryProvider({ children }) {
     setOracleCardsStream([]);
   }, []);
 
+  const refreshBlindspots = useCallback(async (force = false) => {
+    if (isBlindspotsLoading) return;
+    setIsBlindspotsLoading(true);
+    try {
+      const response = await fetchBlindspots({ force_refresh: force });
+      if (response && response.status === 'success') {
+        setBlindspotsData(response);
+      }
+    } catch (err) {
+      console.error('Failed to load blindspots:', err);
+    } finally {
+      setIsBlindspotsLoading(false);
+    }
+  }, [isBlindspotsLoading]);
+
   const value = {
     journalTimelineStream,
     isLoading,
@@ -440,6 +490,12 @@ export function MemoryProvider({ children }) {
     forgetVerificationStream,
     setForgetVerificationStream,
     confirmBulkForget,
+    oracleInputValue,
+    setOracleInputValue,
+    cancelOracleQuery,
+    blindspotsData,
+    isBlindspotsLoading,
+    refreshBlindspots,
   };
 
   return (

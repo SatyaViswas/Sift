@@ -28,14 +28,18 @@ function headers(profile, token) {
   return h;
 }
 
-async function request(method, path, body, profileOverride) {
+async function request(method, path, body, profileOverride, signal) {
   const { profile, token } = await getProfileAndToken();
   const finalProfile = profileOverride || profile;
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const options = {
     method,
     headers: headers(finalProfile, token),
     body: body ? JSON.stringify(body) : undefined,
-  });
+  };
+  if (signal) {
+    options.signal = signal;
+  }
+  const res = await fetch(`${BASE_URL}${path}`, options);
   if (!res.ok) {
     let errPayload = { message: res.statusText };
     try {
@@ -56,8 +60,8 @@ export async function ingestEntry({ text, isSnippet, timestamp, force_save }) {
 }
 
 /** Phase 3 — Oracle: semantic recovery query */
-export async function recoverMemory({ question, state }) {
-  return request('POST', '/api/memory/recover', { question, state });
+export async function recoverMemory({ question, state, signal }) {
+  return request('POST', '/api/memory/recover', { question, state }, null, signal);
 }
 
 /** Phase 3 — Blindspots: fetch long-term analytics */
