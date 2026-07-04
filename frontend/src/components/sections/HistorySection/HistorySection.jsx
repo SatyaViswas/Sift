@@ -247,6 +247,11 @@ function JournalPage({ title, entries, editingId, onEdit, onDelete, onSave, onCa
 function WeekCalendar({ selectedDate, onSelectDate, hasEntries }) {
   const today = useMemo(() => new Date(), []);
   const [weekCenter, setWeekCenter] = useState(() => new Date(today));
+  
+  useEffect(() => {
+    setWeekCenter(new Date(selectedDate));
+  }, [selectedDate]);
+  
   const days = useMemo(() => buildWeek(weekCenter, 14), [weekCenter]);
   const stripRef = useRef(null);
 
@@ -324,8 +329,9 @@ function WeekCalendar({ selectedDate, onSelectDate, hasEntries }) {
 
 /* ─── MonthPopover ───────────────────────────────────────────── */
 function MonthPopover({ selectedDate, onSelectDate, onClose }) {
-  const [viewYear, setViewYear] = useState(selectedDate.getFullYear());
-  const [viewMonth, setViewMonth] = useState(selectedDate.getMonth());
+  const [viewDate, setViewDate] = useState(() => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+  const viewYear = viewDate.getFullYear();
+  const viewMonth = viewDate.getMonth();
   const popoverRef = useRef(null);
 
   useEffect(() => {
@@ -342,11 +348,10 @@ function MonthPopover({ selectedDate, onSelectDate, onClose }) {
   const DAY_ABBR = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
   const shiftMonth = (delta) => {
-    setViewMonth(prev => {
-      let m = prev + delta;
-      if (m < 0)  { setViewYear(y => y - 1); return 11; }
-      if (m > 11) { setViewYear(y => y + 1); return 0;  }
-      return m;
+    setViewDate(prev => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() + delta);
+      return d;
     });
   };
 

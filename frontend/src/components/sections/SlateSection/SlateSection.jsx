@@ -638,7 +638,6 @@ export default function SlateSection() {
         </div>
       </div>
 
-      <DailyPrompt />
 
       {/* ── Mode Switcher ── */}
       <div className="slate-mode-switcher" role="tablist" aria-label="Compose mode">
@@ -678,9 +677,12 @@ export default function SlateSection() {
 
       {/* ── Compose Area ── */}
       <div className="slate-compose" role="tabpanel" aria-labelledby={`slate-tab-${activeMode}`}>
+        <DailyPrompt />
+        
         {/* Quick Snippets */}
         {activeMode === 'snippet' && (
           <div className="slate-compose__snippet-strip">
+
             <input
               ref={snippetRef}
               id="slate-snippet-input"

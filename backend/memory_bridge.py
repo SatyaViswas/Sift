@@ -3,6 +3,7 @@ import json
 import os
 import asyncio
 import hashlib
+import datetime
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any, List
 
@@ -517,6 +518,7 @@ async def get_blindspots(req: BlindspotsRequest, background_tasks: BackgroundTas
     cache_exists = os.path.exists(cache_path)
     is_stale = True
     cached_data = []
+    last_synced = None
 
     if cache_exists:
         try:
@@ -524,6 +526,8 @@ async def get_blindspots(req: BlindspotsRequest, background_tasks: BackgroundTas
                 cache_content = json.load(f)
                 is_stale = cache_content.get("is_stale", True)
                 cached_data = cache_content.get("data", [])
+            mtime = os.path.getmtime(cache_path)
+            last_synced = datetime.datetime.fromtimestamp(mtime).isoformat()
         except Exception:
             pass
             
@@ -540,9 +544,12 @@ async def get_blindspots(req: BlindspotsRequest, background_tasks: BackgroundTas
             with open(cache_path, "w") as f:
                 json.dump(cache_content, f)
                 
+            last_synced = datetime.datetime.now().isoformat()
+                
             return {
                 "status": "success",
-                "data": data
+                "data": data,
+                "last_synced": last_synced
             }
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Blindspots Loop failed: {str(e)}")
@@ -553,7 +560,8 @@ async def get_blindspots(req: BlindspotsRequest, background_tasks: BackgroundTas
     return {
         "status": "success",
         "data": cached_data,
-        "is_stale": is_stale
+        "is_stale": is_stale,
+        "last_synced": last_synced
     }
 
 @app.put("/api/update")

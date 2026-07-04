@@ -110,9 +110,13 @@ export default function OracleSection() {
 
   // Auto-scroll to bottom of chat when messages change
   const feedRef = useRef(null);
+  const previousStreamLength = useRef(oracleCardsStream.length);
   useEffect(() => {
     if (feedRef.current) {
-      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+      if (oracleCardsStream.length > previousStreamLength.current || isOracleThinking || interimText) {
+        feedRef.current.scrollTop = feedRef.current.scrollHeight;
+      }
+      previousStreamLength.current = oracleCardsStream.length;
     }
   }, [oracleCardsStream, isOracleThinking, interimText]);
 

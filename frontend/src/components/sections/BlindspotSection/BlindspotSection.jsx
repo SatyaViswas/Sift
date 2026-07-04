@@ -31,7 +31,12 @@ export default function BlindspotSection() {
         // Fallback for demo format if backend hasn't updated
         setInsights(result.blindspots || result.patterns || result.insights || []);
       }
-      setLastFetched(new Date());
+      
+      if (result.last_synced) {
+        setLastFetched(new Date(result.last_synced));
+      } else {
+        setLastFetched(new Date());
+      }
     } catch (err) {
       console.error('Blindspots fetch failed:', err);
       
