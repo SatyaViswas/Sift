@@ -121,6 +121,20 @@ def generate_timeline(user_id):
 async def run_authentic_seeder():
     print("--- DÉJÀ AUTHENTIC TIMELINE SEEDER (RATE-LIMIT PROTECTED) ---")
     
+    # Initialize Cognee Cloud connection if variables are present
+    service_url = os.getenv("COGNEE_SERVICE_URL") or os.getenv("COGNEE_API_URL")
+    api_key = os.getenv("COGNEE_API_KEY")
+    if service_url and api_key:
+        print(f"Connecting to Cognee Cloud at {service_url}...")
+        try:
+            await cognee.serve(url=service_url, api_key=api_key)
+            print("Successfully connected to Cognee Cloud.")
+        except Exception as e:
+            print(f"Failed to connect to Cognee Cloud: {e}")
+            return
+    else:
+        print("Running in local database mode.")
+    
     email = input("Email: ").strip()
     password = getpass.getpass("Password: ")
 

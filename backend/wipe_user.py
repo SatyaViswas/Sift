@@ -16,6 +16,21 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 async def main():
     print("--- DÉJÀ ACCOUNT WIPE PROTOCOL ---")
+    
+    # Initialize Cognee Cloud connection if variables are present
+    service_url = os.getenv("COGNEE_SERVICE_URL") or os.getenv("COGNEE_API_URL")
+    api_key = os.getenv("COGNEE_API_KEY")
+    if service_url and api_key:
+        print(f"Connecting to Cognee Cloud at {service_url}...")
+        try:
+            await cognee.serve(url=service_url, api_key=api_key)
+            print("Successfully connected to Cognee Cloud.")
+        except Exception as e:
+            print(f"Failed to connect to Cognee Cloud: {e}")
+            return
+    else:
+        print("Running in local database mode.")
+        
     print("This will completely erase all your memories and vector cache from both Supabase and Cognee DB.")
 
     email = input("Email: ").strip()

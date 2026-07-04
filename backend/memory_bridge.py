@@ -138,7 +138,18 @@ async def trigger_cloud_cognify(dataset_name: str):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Memory bridge v3 initialized for Cognee Cloud & Multi-Tenant architecture.")
+    # Initialize Cognee Cloud connection if variables are present
+    service_url = os.getenv("COGNEE_SERVICE_URL") or os.getenv("COGNEE_API_URL")
+    api_key = os.getenv("COGNEE_API_KEY")
+    if service_url and api_key:
+        print(f"Connecting to Cognee Cloud at {service_url}...")
+        try:
+            await cognee.serve(url=service_url, api_key=api_key)
+            print("Successfully connected to Cognee Cloud.")
+        except Exception as e:
+            print(f"Failed to connect to Cognee Cloud: {e}")
+    else:
+        print("Memory bridge v3 initialized for local database mode.")
     yield
     print("Memory bridge v3 shutting down.")
 
