@@ -442,6 +442,10 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "") -> li
     except Exception as e:
         print(f"Graph retrieval failed for blindspots: {e}")
 
+    # If absolutely no data is present, short-circuit and return empty to avoid LLM hallucinations
+    if macro_paths_str == "No recent timeline data available." and not graph_context_str and not full_history.strip():
+        return []
+
     system_prompt = (
         "Act as a brilliant behavioral analyst and human-insight engine. Your goal is to review a user's multi-year diary history and uncover their personal \"Blindspots.\"\n\n"
         "### What is a Blindspot?\n"
