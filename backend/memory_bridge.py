@@ -331,7 +331,7 @@ async def recover_memory(req: RecoverRequest):
 
             async def safe_recall(target):
                 try:
-                    return await cognee.recall(target, datasets=[dataset_name])
+                    return await cognee.recall(target, datasets=[dataset_name], only_context=True)
                 except Exception as e:
                     return e
 
@@ -378,18 +378,28 @@ async def recover_memory(req: RecoverRequest):
         def process_context(ctx):
             if not ctx:
                 return
-            lines_to_process = ctx if isinstance(ctx, list) else str(ctx).split('\n')
-            for item in lines_to_process:
-                item_str = str(item).strip()
-                if not item_str:
-                    continue
-                # Clean up any potential duplicate or irrelevant lines
-                if item_str not in seen_lines:
-                    # Aggressive True Semantic Output Filter
-                    if is_forbidden(item_str, forbidden_entities):
+            
+            items = ctx if isinstance(ctx, list) else [ctx]
+            for item in items:
+                # Extract text if it's a ResponseGraphEntry or similar object
+                if hasattr(item, 'text'):
+                    item_str = item.text
+                elif isinstance(item, dict) and 'text' in item:
+                    item_str = item['text']
+                else:
+                    item_str = str(item)
+                    
+                # Split by newline since graph context contains structured nodes/edges
+                for line in item_str.split('\n'):
+                    clean_line = line.strip()
+                    if not clean_line:
                         continue
-                    seen_lines.add(item_str)
-                    raw_context_lines.append(item_str)
+                    if clean_line not in seen_lines:
+                        # Aggressive True Semantic Output Filter
+                        if is_forbidden(clean_line, forbidden_entities):
+                            continue
+                        seen_lines.add(clean_line)
+                        raw_context_lines.append(clean_line)
 
         process_context(context_specific)
         process_context(context_broad)
@@ -528,12 +538,26 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "", token
     # Cognee Graph Recall (Deep Semantic History)
     graph_context_str = ""
     try:
-        target_blindspots = "Identify all recurring behavioral loops, positive accelerators, negative frictions, and neutral staging blockers in the user's life history."
-        graph_context = await cognee.recall(target_blindspots, datasets=[dataset_name])
+        # ARCHITECTURAL MANDATE 2: Broad-Spectrum Retrieval
+        target_blindspots = "Comprehensive analysis of behavior, recurring thoughts, choices, emotional blocks, and routines."
+        graph_context = await cognee.recall(target_blindspots, datasets=[dataset_name], only_context=True)
             
-        if graph_context:
-            if isinstance(graph_context, list):
-                graph_context_str = "\n".join(str(c) for c in graph_context)
+        # Convert graph context to string
+        if isinstance(graph_context, list):
+            context_lines = []
+            for item in graph_context:
+                if hasattr(item, 'text'):
+                    context_lines.append(item.text)
+                elif isinstance(item, dict) and 'text' in item:
+                    context_lines.append(item['text'])
+                else:
+                    context_lines.append(str(item))
+            graph_context_str = "\n".join(context_lines)
+        else:
+            if hasattr(graph_context, 'text'):
+                graph_context_str = graph_context.text
+            elif isinstance(graph_context, dict) and 'text' in graph_context:
+                graph_context_str = graph_context['text']
             else:
                 graph_context_str = str(graph_context)
     except Exception as e:
