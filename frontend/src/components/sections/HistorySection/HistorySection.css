@@ -1435,3 +1435,23 @@
     animation: none !important;
   }
 }
+
+/* Expand Button */
+.hist-entry__expand-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-accent-history);
+  font-size: 0.9em;
+  font-weight: 500;
+  font-style: italic;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 2px;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color var(--dur-fast);
+}
+
+.hist-entry__expand-btn:hover {
+  text-decoration-color: var(--color-accent-history);
+}

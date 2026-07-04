@@ -91,6 +91,8 @@
   border-radius: var(--radius-md);
   padding: var(--space-4);
   margin: var(--space-4) 0;
+  max-height: 25vh;
+  overflow-y: auto;
 }
 
 .safeguard-modal__topic-text {

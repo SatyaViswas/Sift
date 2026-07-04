@@ -253,6 +253,8 @@ function VoiceSanctuary({
 function SlateCard({ entry, formatTime, fadingId, handleEntryClick, handleEntryDelete }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasSummary = !!entry.summary_snippet;
+  const isLong = entry.content && entry.content.length > 200;
+  const isExpandable = hasSummary || isLong;
 
   const toggleExpand = (e) => {
     e.stopPropagation();
@@ -267,8 +269,8 @@ function SlateCard({ entry, formatTime, fadingId, handleEntryClick, handleEntryD
     return (
       <article
         className={`sc-deep ${isFading ? 'sc--fading' : ''} ${isExpanded ? 'sc-deep--expanded' : ''}`}
-        onClick={hasSummary ? toggleExpand : undefined}
-        style={{ cursor: hasSummary ? 'pointer' : 'default' }}
+        onClick={isExpandable ? toggleExpand : undefined}
+        style={{ cursor: isExpandable ? 'pointer' : 'default' }}
         aria-label="Deep diary entry"
       >
         {/* decorative top rule */}
@@ -300,13 +302,16 @@ function SlateCard({ entry, formatTime, fadingId, handleEntryClick, handleEntryD
 
         {/* body */}
         <p className="sc-deep__body">
-          {hasSummary && !isExpanded ? entry.summary_snippet : entry.content}
+          {hasSummary && !isExpanded 
+            ? entry.summary_snippet 
+            : (!isExpanded && isLong ? entry.content.slice(0, 200) + '...' : entry.content)
+          }
         </p>
 
         {/* expand hint */}
-        {hasSummary && isSaved && (
+        {isExpandable && isSaved && (
           <p className="sc-deep__hint" aria-live="polite">
-            {isExpanded ? '↑ Tap to collapse' : '↓ Tap to read entire entry'}
+            {isExpanded ? '↑ Tap to Show less' : '↓ Tap to Read more'}
           </p>
         )}
 
