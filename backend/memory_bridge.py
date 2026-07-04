@@ -544,11 +544,40 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "", token
         except Exception as e:
             print(f"Failed to load manifest history: {e}")
 
-        # Deduplicate results and filter from full_history
+        # NATIVE SUPABASE FETCH (Bypasses Node.js Memory Overhead)
         raw_context_lines = []
         seen_lines = set()
-
-        if full_history:
+        
+        try:
+            sb = get_supabase(token)
+            
+            def fetch_timeline():
+                return sb.table("journal_slates")\
+                    .select("created_at, content")\
+                    .eq("profile_id", profile)\
+                    .order("created_at", desc=True)\
+                    .limit(10000)\
+                    .execute()
+                    
+            timeline_res = await asyncio.to_thread(fetch_timeline)
+            
+            if timeline_res.data:
+                for item in reversed(timeline_res.data):
+                    date_str = item["created_at"].split("T")[0]
+                    item_str = f"[{date_str}] {item['content']}".strip()
+                    
+                    if not item_str:
+                        continue
+                    if item_str not in seen_lines:
+                        if any(forbid in item_str.lower() for forbid in forbidden_entities):
+                            continue
+                        seen_lines.add(item_str)
+                        raw_context_lines.append(item_str)
+        except Exception as e:
+            print(f"Native Supabase timeline fetch failed in blindspots: {e}")
+            
+        # Fallback to req.full_history if passed by legacy routes
+        if not raw_context_lines and full_history:
             lines_to_process = full_history.split('\n')
             for item in lines_to_process:
                 item_str = str(item).strip()
