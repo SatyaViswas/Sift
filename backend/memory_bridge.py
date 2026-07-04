@@ -4,6 +4,7 @@ import os
 import asyncio
 import hashlib
 import datetime
+import time
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any, List
 
@@ -335,10 +336,15 @@ async def recover_memory(req: RecoverRequest):
                 except Exception as e:
                     return e
 
-            res1, res2 = await asyncio.gather(
-                safe_recall(target_specific),
-                safe_recall(target_broad)
-            )
+            # Wait for both Cognee context retrievals sequentially to prevent SQLite database lock contention
+            t_start = time.time()
+            res1 = await safe_recall(target_specific)
+            t_res1 = time.time()
+            res2 = await safe_recall(target_broad)
+            t_res2 = time.time()
+            
+            print(f"[TELEMETRY] Cognee specific recall: {t_res1 - t_start:.2f}s")
+            print(f"[TELEMETRY] Cognee broad recall: {t_res2 - t_res1:.2f}s")
             
             context_specific = handle_result(res1)
             context_broad = handle_result(res2)
@@ -409,13 +415,20 @@ async def recover_memory(req: RecoverRequest):
         # to guarantee 100% Day 1 accuracy without crashing the Render Node.js instance.
         filtered_full_timeline = []
         try:
+            t_sb_start = time.time()
             sb = get_supabase(req.token)
-            timeline_res = sb.table("journal_slates")\
-                .select("created_at, content")\
-                .eq("profile_id", req.profile)\
-                .order("created_at", desc=True)\
-                .limit(10000)\
-                .execute()
+            
+            def fetch_timeline():
+                return sb.table("journal_slates")\
+                    .select("created_at, content")\
+                    .eq("profile_id", req.profile)\
+                    .order("created_at", desc=True)\
+                    .limit(10000)\
+                    .execute()
+                    
+            timeline_res = await asyncio.to_thread(fetch_timeline)
+            t_sb_end = time.time()
+            print(f"[TELEMETRY] Native Supabase timeline fetch: {t_sb_end - t_sb_start:.2f}s")
                 
             if timeline_res.data:
                 for item in reversed(timeline_res.data):
@@ -473,6 +486,7 @@ async def recover_memory(req: RecoverRequest):
             "</CURRENT_USER_QUERY>"
         )
 
+        t_llm_start = time.time()
         llm_response = await acompletion(
             model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
             messages=[
@@ -481,6 +495,8 @@ async def recover_memory(req: RecoverRequest):
             ],
             temperature=0.1
         )
+        t_llm_end = time.time()
+        print(f"[TELEMETRY] LLM generation: {t_llm_end - t_llm_start:.2f}s")
         
         analysis_result = llm_response.choices[0].message.content.strip()
         
