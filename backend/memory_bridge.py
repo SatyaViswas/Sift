@@ -195,21 +195,25 @@ async def recover_memory(req: RecoverRequest):
                 target_specific = req.query if req.query else "What choices, habits, or preferences matter most to this user?"
                 target_broad = "Comprehensive history of [Classification: UserSlateEntry], diary entries, watched media, preferences, and life logs."
                 
-                results = await asyncio.gather(
-                    cognee.recall(target_specific, datasets=[dataset_name]),
-                    cognee.recall(target_broad, datasets=[dataset_name]),
-                    return_exceptions=True
-                )
-                
                 def handle_result(res):
                     if isinstance(res, Exception):
                         if "DatasetNotFoundError" in str(res) or "404" in str(res):
                             return []
                         raise res
                     return res
+
+                try:
+                    res1 = await cognee.recall(target_specific, datasets=[dataset_name])
+                except Exception as e:
+                    res1 = e
                     
-                context_specific = handle_result(results[0])
-                context_broad = handle_result(results[1])
+                try:
+                    res2 = await cognee.recall(target_broad, datasets=[dataset_name])
+                except Exception as e:
+                    res2 = e
+                    
+                context_specific = handle_result(res1)
+                context_broad = handle_result(res2)
                 
         except Exception as recall_err:
             raise recall_err
@@ -356,72 +360,45 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "") -> li
     dataset_name = f"user_{profile}"
     
     try:
-        async with cognee_lock:
-            # Broad spectrum recall to capture everything related to habits, lifestyle, and history
-            prompt1 = "Comprehensive history of [Classification: UserSlateEntry], diary entries, daily routines, habits, productivity, and lifestyle patterns."
-            prompt2 = "user daily routines, diet, food, meals, physical exercise, workouts, sleep, mental state, emotional state, brain fog, fatigue, procrastination, avoidance, focus, environment"
-            results = await asyncio.gather(
-                cognee.recall(prompt1, datasets=[dataset_name]),
-                cognee.recall(prompt2, datasets=[dataset_name]),
-                return_exceptions=True
-            )
-            
-            def handle_result(res):
-                if isinstance(res, Exception):
-                    if "DatasetNotFoundError" in str(res) or "404" in str(res):
-                        return []
-                    raise res
-                return res
+        # Manifest Read: Semantic Amnesia Vault
+        forbidden_entities = set()
+        try:
+            manifest_path = f"oracle_manifest_{dataset_name}.json"
+            if os.path.exists(manifest_path):
+                with open(manifest_path, "r") as f:
+                    manifest_data = json.load(f)
+                    for k, val in manifest_data.items():
+                        if val.get("status") == "forgotten":
+                            topic = val.get("topic")
+                            if topic:
+                                for t in str(topic).split(','):
+                                    clean_t = t.strip(' .!?,').lower()
+                                    if clean_t:
+                                        forbidden_entities.add(clean_t)
+        except Exception as e:
+            print(f"Failed to load manifest history: {e}")
 
-            context1 = handle_result(results[0])
-            context2 = handle_result(results[1])
-            
-            # Manifest Read: Semantic Amnesia Vault
-            forbidden_entities = set()
-            try:
-                manifest_path = f"oracle_manifest_{dataset_name}.json"
-                if os.path.exists(manifest_path):
-                    with open(manifest_path, "r") as f:
-                        manifest_data = json.load(f)
-                        for k, val in manifest_data.items():
-                            if val.get("status") == "forgotten":
-                                topic = val.get("topic")
-                                if topic:
-                                    for t in str(topic).split(','):
-                                        clean_t = t.strip(' .!?,').lower()
-                                        if clean_t:
-                                            forbidden_entities.add(clean_t)
-            except Exception as e:
-                print(f"Failed to load manifest history: {e}")
+        # Deduplicate results and filter from full_history
+        raw_context_lines = []
+        seen_lines = set()
 
-            # Deduplicate results and filter
-            raw_context_lines = []
-            seen_lines = set()
-
-            def process_context(ctx):
-                if not ctx:
-                    return
-                lines_to_process = ctx if isinstance(ctx, list) else str(ctx).split('\n')
-                for item in lines_to_process:
-                    item_str = str(item).strip()
-                    if not item_str:
+        if full_history:
+            lines_to_process = full_history.split('\n')
+            for item in lines_to_process:
+                item_str = str(item).strip()
+                if not item_str:
+                    continue
+                if item_str not in seen_lines:
+                    if any(forbid in item_str.lower() for forbid in forbidden_entities):
                         continue
-                    if item_str not in seen_lines:
-                        if any(forbid in item_str.lower() for forbid in forbidden_entities):
-                            continue
-                        seen_lines.add(item_str)
-                        raw_context_lines.append(item_str)
+                    seen_lines.add(item_str)
+                    raw_context_lines.append(item_str)
 
-            process_context(context1)
-            process_context(context2)
-            
-            macro_paths_str = "\n".join(raw_context_lines) if raw_context_lines else ""
-            
-    except Exception as recall_err:
-        if "DatasetNotFoundError" in str(recall_err) or "404" in str(recall_err):
-            return []
-        else:
-            raise recall_err
+        macro_paths_str = "\n".join(raw_context_lines) if raw_context_lines else ""
+        
+    except Exception as e:
+        print(f"Error processing history: {e}")
+        return []
     
     if not macro_paths_str:
         return []
@@ -510,6 +487,7 @@ async def get_blindspots(req: BlindspotsRequest, background_tasks: BackgroundTas
             pass
             
     if req.force_refresh:
+        print(f"DEBUG: Force Refresh triggered! Calculating new blindspots from {len(req.full_history)} characters of history...")
         # Synchronous execution
         try:
             data = await _generate_blindspots_logic(req.profile, req.full_history)
@@ -528,12 +506,13 @@ async def get_blindspots(req: BlindspotsRequest, background_tasks: BackgroundTas
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Blindspots Loop failed: {str(e)}")
             
-    if is_stale:
-        background_tasks.add_task(_background_generate_blindspots, req.profile, req.full_history)
+    # Ensure background generation is NOT triggered implicitly to save LLM tokens.
+    # We only return cached data. Manual refresh is handled synchronously above.
         
     return {
         "status": "success",
-        "data": cached_data
+        "data": cached_data,
+        "is_stale": is_stale
     }
 
 @app.put("/api/update")

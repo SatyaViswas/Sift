@@ -253,7 +253,7 @@ app.get('/api/memory/blindspots', async (req, res) => {
                 .select('created_at, content')
                 .eq('profile_id', req.userProfile)
                 .order('created_at', { ascending: false })
-                .limit(2000);
+                .limit(10000);
 
             if (!error && data) {
                 full_history = data.reverse().map(item => `[${new Date(item.created_at).toISOString().split('T')[0]}] ${item.content}`).join('\n');
