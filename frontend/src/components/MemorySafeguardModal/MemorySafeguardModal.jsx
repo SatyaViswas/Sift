@@ -41,7 +41,7 @@ export default function MemorySafeguardModal({ entry, topic, onClose, onForgotte
         
         <div className="safeguard-modal__body">
           <p className="safeguard-modal__text">
-            Sift will permanently dissolve your past relationship logs from your recovery graph regarding:
+            Déjà will permanently dissolve your past relationship logs from your recovery graph regarding:
           </p>
           <div className="safeguard-modal__topic-card">
             <span className="safeguard-modal__topic-text">"{displayTopic}"</span>

@@ -1,5 +1,5 @@
 /**
- * Sift API utility layer.
+ * Déjà API utility layer.
  * Profile is read from the Supabase session (user UUID).
  * Falls back to 'default_user' for unauthenticated contexts.
  */

@@ -30,7 +30,7 @@ function AppShell() {
         WebkitTextFillColor: 'transparent',
         backgroundClip: 'text',
       }}>
-        Sift
+          Déjà
       </div>
     );
   }

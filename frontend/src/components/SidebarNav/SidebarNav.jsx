@@ -93,7 +93,7 @@ export default function SidebarNav() {
       {/* ── Wordmark ── */}
       <div className="sidebar__brand">
         <div className="sidebar__logo">
-          <span className="sidebar__logo-text">Sift</span>
+          <span className="sidebar__logo-text">Déjà</span>
           <span className={`sidebar__logo-dot sidebar__logo-dot--${activeTab}`} aria-hidden="true" />
         </div>
         <p className="sidebar__tagline">Cognitive Recovery Journal</p>

@@ -1,5 +1,5 @@
 /*
-  Supabase Schema Definition for Sift Recovery Engine
+  Supabase Schema Definition for Déjà Recovery Engine
   Features: Row Level Security, Automated Timestamps
 */
 

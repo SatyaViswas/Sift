@@ -70,7 +70,7 @@ const proxyFetch = async (url, method, body = null) => {
 };
 
 app.get('/', (req, res) => {
-    res.json({ status: 'online', app: 'Sift Gateway Engine v2', mode: 'strict_determinism' });
+    res.json({ status: 'online', app: 'Déjà Gateway Engine v2', mode: 'strict_determinism' });
 });
 
 app.get('/api/health', async (req, res) => {
@@ -417,7 +417,7 @@ app.post('/api/memory/improve', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Sift Gateway v2 running on port ${PORT}`);
+    console.log(`Déjà Gateway v2 running on port ${PORT}`);
 });
 
 process.on('unhandledRejection', (reason, promise) => { console.error('Unhandled Rejection:', reason); });

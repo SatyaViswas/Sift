@@ -5,7 +5,7 @@ import ThemeToggle from '../ThemeToggle/ThemeToggle';
 import './AppHeader.css';
 
 /**
- * AppHeader — Mobile-only top bar with Sift wordmark, theme toggle, and profile button.
+ * AppHeader — Mobile-only top bar with Déjà wordmark, theme toggle, and profile button.
  * Hidden on desktop (≥ 768px) — SidebarNav takes over.
  */
 export default function AppHeader() {
@@ -33,8 +33,8 @@ export default function AppHeader() {
     <header className={`app-header app-header--${activeTab}`}>
       <div className="app-header__inner">
         {/* Wordmark */}
-        <div className="app-header__wordmark" aria-label="Sift">
-          <span className="app-header__logo-text">Sift</span>
+        <div className="app-header__wordmark" aria-label="Déjà">
+          <span className="app-header__logo-text">Déjà</span>
           <span className="app-header__logo-dot" aria-hidden="true" />
         </div>
 

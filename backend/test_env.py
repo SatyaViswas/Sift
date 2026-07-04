@@ -18,7 +18,7 @@ async def verify_local_sdk():
         # A simple string ingestion to force Cognee to initialize its local databases
         # This will create local database storage folders inside your directory automatically.
         print("\nTesting local database initialization & relationship engine...")
-        await cognee.remember("Sift is an ambient cognitive recovery engine.")
+        await cognee.remember("Déjà is an ambient cognitive recovery engine.")
         
         print("\n🎉 SUCCESS! Your local Cognee SDK is fully initialized.")
         print("The database pipelines are generated locally on your machine.")

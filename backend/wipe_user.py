@@ -15,7 +15,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     exit(1)
 
 async def main():
-    print("--- SIFT ACCOUNT WIPE PROTOCOL ---")
+    print("--- DÉJÀ ACCOUNT WIPE PROTOCOL ---")
     print("This will completely erase all your memories and vector cache from both Supabase and Cognee DB.")
 
     email = input("Email: ").strip()

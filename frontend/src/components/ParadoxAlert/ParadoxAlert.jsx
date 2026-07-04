@@ -82,7 +82,7 @@ export default function ParadoxAlert({ alert, onDismiss, shouldSpeak = false }) 
               Cognitive Paradox Detected
             </h2>
             <p className="paradox-alert__subtitle">
-              Sift noticed a potential conflict in your recent entries
+              Déjà noticed a potential conflict in your recent entries
             </p>
           </div>
 

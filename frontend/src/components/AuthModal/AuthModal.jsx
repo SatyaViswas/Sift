@@ -68,11 +68,11 @@ export default function AuthModal({ onClose }) {
 
   return (
     <div className="auth-overlay" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Sign in to Sift">
+      <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Sign in to Déjà">
         {/* Header */}
         <div className="auth-modal__header">
           <div className="auth-modal__logo">
-            <span className="auth-modal__logo-text">Sift</span>
+            <span className="auth-modal__logo-text">Déjà</span>
             <span className="auth-modal__logo-dot" aria-hidden="true" />
           </div>
           <button className="auth-modal__close" onClick={onClose} aria-label="Close">✕</button>

@@ -82,7 +82,7 @@ export default function LandingPage() {
       <nav className="landing__nav">
           <div className="landing__nav-inner">
           <div className="landing__nav-brand">
-            <span className="landing__nav-wordmark">Sift</span>
+            <span className="landing__nav-wordmark">Déjà</span>
             <span className="landing__nav-dot" aria-hidden="true" />
           </div>
           <div className="landing__nav-actions">

@@ -119,7 +119,7 @@ def generate_timeline(user_id):
     return supabase_rows, cognee_monthly_logs
 
 async def run_authentic_seeder():
-    print("--- SIFT AUTHENTIC TIMELINE SEEDER (RATE-LIMIT PROTECTED) ---")
+    print("--- DÉJÀ AUTHENTIC TIMELINE SEEDER (RATE-LIMIT PROTECTED) ---")
     
     email = input("Email: ").strip()
     password = getpass.getpass("Password: ")
