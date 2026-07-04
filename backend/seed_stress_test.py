@@ -1,64 +1,63 @@
-# seed_stress_test.py
 import os
 import time
 import asyncio
-import requests
+import getpass
+import random
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase import create_client, Client, ClientOptions
 import cognee
 
 load_dotenv()
-
 if os.getenv("LLM_API_KEY") and not os.getenv("GEMINI_API_KEY"):
     os.environ["GEMINI_API_KEY"] = os.getenv("LLM_API_KEY")
 
-FASTAPI_URL = "http://127.0.0.1:8000"
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY")
-PROFILE_ID = "default_user"
-
-print("--- SIFT CHRONOLOGICAL SEEDER (GEMINI FREE-TIER GUARDRAIL EDITION) ---")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("CRITICAL ERROR: Environment credentials missing.")
     exit(1)
 
-sb_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# --- REALISTIC DATA POOLS ---
 
-# --- THEME POOLS (SNIPPETS & DEEP ENTRIES) ---
-gaming_triggers = [
-    "Stayed up until 2:30 AM playing Valorant and scrolling Instagram reels.",
-    "Lost track of time completely. Played mobile games and watched YouTube until almost 3 AM.",
-    "Extremely late night. Got caught in a doomscrolling loop on my phone until way past midnight."
-]
-academic_crashes = [
-    "Woke up feeling completely destroyed. Missed my morning classes at CVR College again.",
-    "So groggy today. I slept right through my alarm and completely missed my morning Data Science lecture.",
-    "Feeling terrible and sluggish. Ended up skipping my morning engineering classes because I couldn't wake up."
-]
-morning_routine = [
-    "Started the day perfectly. Drank a massive glass of water and did 10 minutes of quiet meditation before opening my laptop.",
-    "Did my 10-minute morning meditation and hydrated well before touching any screens.",
-    "Woke up, drank a liter of water, and sat in silence for 10 minutes. Great start."
-]
-coding_triumphs = [
-    "My focus for Data Structures and Algorithms is razor-sharp today. Solved three complex graph problems flawlessly.",
-    "FastAPI routing logic came so easily to me this afternoon. Total flow state.",
-    "Crushed my Java midterm prep today. My brain feels incredibly clear and responsive to complex logic."
-]
-aesthetic_stalling = [
-    "Spent two hours organizing my physical desk and downloading new color themes for VS Code.",
-    "Wasted a lot of time tweaking my terminal colors, organizing my Apple Music playlists, and wiping down my monitors.",
-    "Fell down a rabbit hole installing new extensions and customizing my React IDE layout instead of writing code."
-]
-study_delays = [
-    "Ended up pushing my actual Java studying to tomorrow because I 'ran out of time'.",
-    "Didn't actually get any real project work done for AgriVeda today. Kept delaying the actual coding part.",
-    "Postponed my DevOps lab preparation again. I keep finding excuses to avoid the hard technical work."
+snippets = [
+    "Tired today.",
+    "Had a massive lunch, feeling so sleepy now.",
+    "Finished the React assignment finally.",
+    "Just watched some YouTube to chill.",
+    "Good workout today.",
+    "Feeling pretty good.",
+    "Too much caffeine today, feeling jittery.",
+    "Need to buy groceries later.",
+    "Skipped the gym, too tired.",
+    "Weather is nice, took a short walk."
 ]
 
-def generate_timeline():
+diaries = [
+    "I've been feeling immense pressure about my placement interviews lately. The constant need to balance academics with coding practice is burning me out. I need to find a better structure.",
+    "Feeling completely stuck in this project. Sometimes I feel like I'm just copying things without understanding the core concepts. Need to reset my mindset.",
+    "Had a long conversation with a friend today about our future careers. It made me realize I need to focus more on backend systems rather than jumping between frameworks.",
+    "I am constantly worried that I am falling behind my peers. Everyone seems to have a startup or an internship. I need to stop comparing myself and just focus on my own path."
+]
+
+# Pattern 1 (Negative): Late night gaming -> Missed morning class 1-2 days later
+p1_trigger = ["Stayed up until 3 AM playing Valorant.", "Got caught in a TikTok doomscrolling loop until 2:30 AM.", "Played BGMI with the squad until way past midnight."]
+p1_effect = ["Woke up feeling completely destroyed. Missed my morning classes again.", "Slept through my alarm and completely missed the morning Data Science lecture.", "Feeling terrible and sluggish. Skipped morning engineering class."]
+
+# Pattern 2 (Negative): Junk food lunch -> Afternoon brain fog / skipped coding
+p2_trigger = ["Had a massive double burger and fries for lunch.", "Ate a huge pizza for lunch.", "Stuffed myself with heavy fast food at noon."]
+p2_effect = ["Severe afternoon brain fog. Couldn't write a single line of code.", "Food coma hit hard. Skipped my afternoon coding session completely.", "Feeling lethargic all afternoon. Totally blew off my Leetcode practice."]
+
+# Pattern 3 (Positive): Morning meditation -> High focus flow state
+p3_trigger = ["Started the day perfectly. 15 minutes of quiet meditation before opening my laptop.", "Did my morning meditation routine. Head feels incredibly clear.", "Woke up and sat in silence for 15 minutes to clear my mind."]
+p3_effect = ["My focus is razor-sharp today. Solved three complex algorithmic problems flawlessly.", "Total flow state this afternoon. Built out the entire backend logic effortlessly.", "Brain feels incredibly responsive. Crushed my Java midterm prep."]
+
+# Pattern 4 (Neutral/Staging): Customizing IDE -> Procrastinating on actual hard task
+p4_trigger = ["Spent two hours downloading new color themes for VS Code and organizing my desktop.", "Wasted a lot of time tweaking my terminal colors and organizing playlists.", "Fell down a rabbit hole installing new extensions and customizing my React IDE layout."]
+p4_effect = ["Ended up pushing my actual Java studying to tomorrow because I 'ran out of time'.", "Didn't actually get any real project work done today. Kept delaying the hard coding part.", "Postponed my DevOps lab preparation again. Keep finding excuses."]
+
+def generate_timeline(user_id):
     start_date = datetime(2023, 1, 1)
     end_date = datetime(2026, 7, 4)
     current_date = start_date
@@ -66,15 +65,14 @@ def generate_timeline():
     supabase_rows = []
     cognee_monthly_logs = {}
     
-    i_game, i_crash = 0, 0
-    i_morn, i_code = 0, 0
-    i_aes, i_delay = 0, 0
+    p1_active = False; p1_delay = 0
+    p2_active = False
+    p3_active = False
+    p4_active = False
     
     while current_date <= end_date:
         timestamp = current_date.strftime("%Y-%m-%dT12:00:00Z")
         month_key = current_date.strftime("%Y-%m")
-        day = current_date.weekday()
-        day_num = current_date.day
         
         if month_key not in cognee_monthly_logs:
             cognee_monthly_logs[month_key] = []
@@ -82,79 +80,123 @@ def generate_timeline():
         def add_entry(text):
             supabase_rows.append({
                 "content": text,
-                "profile_id": PROFILE_ID,
+                "profile_id": user_id,
                 "created_at": timestamp
             })
-            cognee_text = f"[Timestamp: {timestamp}] [Classification: UserSlateEntry] {text}"
+            cognee_text = f"[{timestamp}] {text}"
             cognee_monthly_logs[month_key].append(cognee_text)
 
-        if day in [1, 3]:
-            add_entry(gaming_triggers[i_game % len(gaming_triggers)])
-            add_entry(academic_crashes[i_crash % len(academic_crashes)])
-            i_game += 1; i_crash += 1
-            
-        if day in [0, 2]:
-            add_entry(morning_routine[i_morn % len(morning_routine)])
-            add_entry(coding_triumphs[i_code % len(coding_triumphs)])
-            i_morn += 1; i_code += 1
-            
-        if day_num in [10, 20]:
-            add_entry(aesthetic_stalling[i_aes % len(aesthetic_stalling)])
-            add_entry(study_delays[i_delay % len(study_delays)])
-            i_aes += 1; i_delay += 1
-            
+        day_of_week = current_date.weekday()
+        entry_text = ""
+        
+        if p1_active and p1_delay <= 0:
+            entry_text = random.choice(p1_effect)
+            p1_active = False
+        elif p1_active:
+            p1_delay -= 1
+            entry_text = random.choice(snippets)
+        elif random.random() < 0.15:
+            pattern_choice = random.randint(1, 4)
+            if pattern_choice == 1:
+                entry_text = random.choice(p1_trigger)
+                p1_active = True
+                p1_delay = random.randint(0, 1)
+            elif pattern_choice == 2:
+                entry_text = f"{random.choice(p2_trigger)} {random.choice(p2_effect)}"
+            elif pattern_choice == 3:
+                entry_text = f"{random.choice(p3_trigger)} {random.choice(p3_effect)}"
+            elif pattern_choice == 4:
+                entry_text = f"{random.choice(p4_trigger)} {random.choice(p4_effect)}"
+        else:
+            if random.random() < 0.15:
+                entry_text = random.choice(diaries)
+            else:
+                entry_text = random.choice(snippets)
+                
+        add_entry(entry_text)
         current_date += timedelta(days=1)
         
     return supabase_rows, cognee_monthly_logs
 
-async def run_defensive_seeder():
-    supabase_rows, cognee_monthly_logs = generate_timeline()
+async def run_authentic_seeder():
+    print("--- SIFT AUTHENTIC TIMELINE SEEDER (RATE-LIMIT PROTECTED) ---")
     
-    # 1. Supabase Bulk Save (Instant, no rate-limits)
-    # Skipping supabase since it was already populated in the first run
-    print("ℹ️ Skipping Supabase upload: rows are already populated in Cloud Tables.")
+    email = input("Email: ").strip()
+    password = getpass.getpass("Password: ")
+
+    print("\nAuthenticating...")
+    auth_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    try:
+        response = auth_client.auth.sign_in_with_password({"email": email, "password": password})
+        user_id = response.user.id
+        access_token = response.session.access_token
+        print(f"✅ Authenticated as {email} (UUID: {user_id})")
+    except Exception as e:
+        print(f"❌ Authentication failed: {e}")
+        return
+
+    sb_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY, options=ClientOptions(
+        headers={"Authorization": f"Bearer {access_token}"}
+    ))
     
-    # 2. Interleaved Monthly Ingestion + Cognification Loops
+    print("\n1. Generating 3.5 Years of Authentic Human Data...")
+    supabase_rows, cognee_monthly_logs = generate_timeline(user_id)
+    print(f"Generated {len(supabase_rows)} daily entries.")
+    
+    print("\n2. Skipping Supabase Upload (Already populated)...")
+    # chunk_size = 200
+    # for i in range(0, len(supabase_rows), chunk_size):
+    #     chunk = supabase_rows[i:i+chunk_size]
+    #     try:
+    #         sb_client.table("journal_slates").insert(chunk).execute()
+    #         print(f"   Inserted rows {i} to {i+len(chunk)}...")
+    #     except Exception as e:
+    #         print(f"❌ Failed to insert chunk: {e}")
+    #         return
+            
+    # print("✅ Supabase Upload Complete.")
+    
+    print("\n3. Building Vector Knowledge Graph via Cognee (Resuming at Month 5)...")
+    dataset_name = f"user_{user_id}"
     total_months = len(cognee_monthly_logs)
-    print(f"Resuming 3.5-Year Data Seed from Month 29 out of {total_months}...")
     
-    for idx, (month, lines) in enumerate(cognee_monthly_logs.items(), 1):
-        if idx < 29:
-            print(f"   [Skipping] Month {idx}/{total_months}: {month} already indexed.")
+    # Batch entries into monthly summary logs to prevent parallel LLM requests per entry
+    for idx, (month, entries) in enumerate(cognee_monthly_logs.items(), 1):
+        if idx < 35:
+            print(f"👉 Skipping Month {idx}/{total_months} [{month}] (Already processed)")
             continue
             
-        print(f"\n👉 [Month {idx}/{total_months}]: Resuming at {month} ({len(lines)} log lines)")
-        payload = "\n".join(lines)
+        print(f"👉 Processing Month {idx}/{total_months} [{month}] ({len(entries)} entries)")
         
-        # Step A: Ingest text tokens into Vector memory storage via backend HTTP
-        try:
-            requests.post(
-                f"{FASTAPI_URL}/api/ingest",
-                json={"profile": PROFILE_ID, "text": payload}
-            )
-            print(f"   |-- Step A: Vector Ingestion Complete.")
-        except Exception as e:
-            print(f"   |-- Ingestion error at month {month}: {e}")
-            continue
+        # Combine all daily entries for this month into one single document
+        monthly_summary_doc = f"Journal Log Summary for {month}:\n" + "\n".join(entries)
+        
+        # Upload as a single combined document
+        await cognee.add(monthly_summary_doc, dataset_name=dataset_name)
             
-        # Step B: Trigger local graph structure compilation natively
+        # Compile graph structure for this month
         try:
-            print(f"   |-- Step B: Compiling Knowledge Graph Nodes via Gemini Free Tier...")
-            await cognee.cognify(datasets=[f"user_{PROFILE_ID}"])
-            print(f"   |-- Step B: Monthly Graph Matrix Verified.")
+            await cognee.cognify(datasets=[dataset_name])
+            print("   ✅ Graph chunk compiled successfully.")
         except Exception as e:
             if "429" in str(e) or "rate limit" in str(e).lower():
-                print("   | [WARNING]: Hit rate limits! Increasing cooldown safety buffer...")
-                time.sleep(30)
+                print("   ⚠️ Hit Rate Limits! Taking a 75s recovery breathing room...")
+                time.sleep(75)
+                try:
+                    await cognee.cognify(datasets=[dataset_name])
+                    print("   ✅ Graph chunk compiled successfully after retry.")
+                except Exception as retry_err:
+                    print(f"   ❌ Retry failed: {retry_err}")
             else:
-                print(f"   |-- Cognify failed: {e}")
+                print(f"   ❌ Cognify failed: {e}")
+        
+        # Add a mandatory sleep to respect the 15 RPM Gemini limit
+        if idx < total_months:
+            cooldown = 15
+            print(f"   ⏳ Pacing cooldown: Waiting {cooldown}s...")
+            time.sleep(cooldown)
             
-        # Step C: Mandatory Rate-Limit Cooldown Sleep Window
-        cooldown_seconds = 20
-        print(f"   |-- Step C: Entering {cooldown_seconds}s cooldown to reset Gemini API request tokens...")
-        time.sleep(cooldown_seconds)
-            
-    print("\n🚀 3.5-Year Timeline Successfully Restored and Resumed to End with 0 Faults!")
+    print(f"\n🎉 3.5-Year Timeline Successfully Seeded for {email}!")
 
 if __name__ == "__main__":
-    asyncio.run(run_defensive_seeder())
+    asyncio.run(run_authentic_seeder())

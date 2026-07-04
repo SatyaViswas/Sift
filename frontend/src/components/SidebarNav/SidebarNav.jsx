@@ -1,5 +1,7 @@
+import { useState, useRef, useEffect } from 'react';
 import { useNavigation } from '../../context/NavigationContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ThemeToggle/ThemeToggle';
 import './SidebarNav.css';
 
@@ -59,12 +61,32 @@ const TABS = [
 ];
 
 /**
- * SidebarNav — Desktop-only left sidebar navigation.
+ * SidebarNav — Desktop-only left sidebar navigation with profile menu.
  * Hidden on mobile via CSS (display: none on < 768px).
  */
 export default function SidebarNav() {
   const { activeTab, navigate } = useNavigation();
   const { theme } = useTheme();
+  const { user, signOut } = useAuth();
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  // Close profile menu on outside click
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setProfileMenuOpen(false);
+      }
+    }
+    if (profileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [profileMenuOpen]);
+
+  // User avatar initial
+  const avatarInitial = user?.email ? user.email[0].toUpperCase() : '?';
+  const displayEmail = user?.email || 'Unknown';
 
   return (
     <aside className="sidebar" aria-label="Application navigation">
@@ -111,6 +133,8 @@ export default function SidebarNav() {
       {/* ── Bottom Controls ── */}
       <div className="sidebar__footer">
         <div className="sidebar__divider" aria-hidden="true" />
+
+        {/* Theme row */}
         <div className="sidebar__footer-inner">
           <div className="sidebar__footer-info">
             <span className="sidebar__footer-label">Appearance</span>
@@ -121,9 +145,49 @@ export default function SidebarNav() {
           <ThemeToggle />
         </div>
 
-        <div className="sidebar__system-status">
-          <span className="sidebar__status-dot" aria-hidden="true" />
-          <span className="sidebar__status-text">Backend connected</span>
+        {/* ── Profile Menu ── */}
+        <div className="sidebar__profile-wrap" ref={menuRef}>
+          <button
+            id="sidebar-profile-btn"
+            className="sidebar__profile-btn"
+            onClick={() => setProfileMenuOpen(prev => !prev)}
+            aria-expanded={profileMenuOpen}
+            aria-haspopup="menu"
+            aria-label="Account menu"
+          >
+            <div className="sidebar__avatar">{avatarInitial}</div>
+            <div className="sidebar__profile-info">
+              <span className="sidebar__profile-email">{displayEmail}</span>
+              <span className="sidebar__profile-role">Your vault</span>
+            </div>
+            <svg className={`sidebar__profile-chevron ${profileMenuOpen ? 'sidebar__profile-chevron--open' : ''}`}
+              viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+
+          {profileMenuOpen && (
+            <div className="sidebar__profile-menu" role="menu" aria-label="Account options">
+              <div className="sidebar__profile-menu-header">
+                <span className="sidebar__profile-menu-email">{displayEmail}</span>
+                <span className="sidebar__profile-menu-label">Signed in</span>
+              </div>
+              <div className="sidebar__profile-menu-divider" />
+              <button
+                id="sidebar-signout-btn"
+                className="sidebar__profile-menu-item sidebar__profile-menu-item--danger"
+                role="menuitem"
+                onClick={() => { setProfileMenuOpen(false); signOut(); }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" width="15" height="15" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  <polyline points="16 17 21 12 16 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                Sign Out
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </aside>

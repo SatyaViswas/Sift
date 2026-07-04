@@ -7,17 +7,25 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 5051;
 // Pointing to the new memory_bridge_3.py FastAPI server which still runs on 8000 by default
-const FASTAPI_URL = 'http://127.0.0.1:8000'; 
+const FASTAPI_URL = 'http://127.0.0.1:8000';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
-let supabase = null;
 
-if (supabaseUrl && supabaseKey) {
-    supabase = createClient(supabaseUrl, supabaseKey);
-} else {
-    console.warn("WARNING: Supabase credentials missing. Database operations will fail. The system will rely purely on the Python Bridge (Cognee).");
-}
+
+// Create an authenticated client if token provided, otherwise fallback to Anon
+const getSupabase = (req) => {
+    if (!supabaseUrl || !supabaseKey) {
+        console.warn("WARNING: Supabase credentials missing. Database operations will fail.");
+        return null;
+    }
+    if (req.userToken) {
+        return createClient(supabaseUrl, supabaseKey, {
+            global: { headers: { Authorization: `Bearer ${req.userToken}` } }
+        });
+    }
+    return createClient(supabaseUrl, supabaseKey);
+};
 
 // Global Middleware
 app.use(cors());
@@ -28,6 +36,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
     const profile = req.headers['x-user-profile'] || req.query.user;
     req.userProfile = profile || 'default_user';
+    req.userToken = req.headers['x-user-token'] || req.query.token || null;
     next();
 });
 
@@ -81,7 +90,7 @@ app.get('/api/health', async (req, res) => {
 // Gateway Routing: Data Ingestion
 app.post('/api/memory/ingest', async (req, res) => {
     try {
-        const { text, timestamp, isSnippet } = req.body;
+        const { text, timestamp, isSnippet, force_save } = req.body;
         if (!text) {
             return res.status(400).json({ error: "Missing 'text' in request body." });
         }
@@ -91,30 +100,38 @@ app.post('/api/memory/ingest', async (req, res) => {
             profile: req.userProfile,
             text,
             timestamp,
-            isSnippet
+            isSnippet,
+            force_save: !!force_save,
+            token: req.userToken
         });
+
+        if (result && result.status === 'tripwire_alert') {
+            return res.status(200).json(result);
+        }
 
         // 2. Forget / Soft Delete Check from Intent
         if (result && result.status === 'forget_confirmation') {
             const topic = result.data?.topic || '';
-            
+
+            const supabase = getSupabase(req);
             if (supabase) {
                 const { data, error } = await supabase
                     .from('journal_slates')
                     .select('*')
                     .eq('profile_id', req.userProfile)
                     .ilike('content', `%${topic}%`);
-                    
+
                 if (error) {
                     console.error('Supabase Search Error:', error);
                     return res.status(500).json({ status: 'error', message: 'Database error during search.', details: error });
                 }
-                
+
                 // If no exact UI rows matched, just purge it semantically in the python side vault
                 if (data && data.length === 0) {
                     const forgetResult = await proxyFetch(`${FASTAPI_URL}/api/forget`, 'POST', {
                         profile: req.userProfile,
-                        topic: topic
+                        topic: topic,
+                        token: req.userToken
                     });
                     return res.status(200).json({
                         status: 'success',
@@ -122,7 +139,7 @@ app.post('/api/memory/ingest', async (req, res) => {
                         bridgeResponse: forgetResult
                     });
                 }
-                
+
                 return res.status(200).json({
                     status: 'verification_required',
                     topic: topic,
@@ -131,7 +148,8 @@ app.post('/api/memory/ingest', async (req, res) => {
             } else {
                 const forgetResult = await proxyFetch(`${FASTAPI_URL}/api/forget`, 'POST', {
                     profile: req.userProfile,
-                    topic: topic
+                    topic: topic,
+                    token: req.userToken
                 });
                 return res.status(200).json({
                     status: 'success',
@@ -143,6 +161,7 @@ app.post('/api/memory/ingest', async (req, res) => {
 
         // 3. Supabase Insert (Standard Journal Flow)
         let databaseRecord = null;
+        const supabase = getSupabase(req);
         if (supabase) {
             const payload = { content: text, profile_id: req.userProfile };
 
@@ -163,7 +182,7 @@ app.post('/api/memory/ingest', async (req, res) => {
                     .from('journal_slates')
                     .update({ summary_snippet: result.summary_snippet })
                     .eq('id', databaseRecord.id);
-                
+
                 if (!updateError) {
                     databaseRecord.summary_snippet = result.summary_snippet;
                 }
@@ -184,6 +203,7 @@ app.post('/api/memory/ingest', async (req, res) => {
 // Gateway Routing: Timeline (Unchanged essentially, but modernized for safety)
 app.get('/api/memory/timeline', async (req, res) => {
     try {
+        const supabase = getSupabase(req);
         if (!supabase) {
             return res.status(500).json({ error: "Supabase connection is not initialized." });
         }
@@ -211,8 +231,9 @@ app.post('/api/memory/recover', async (req, res) => {
     try {
         const { question, state } = req.body || {};
         const query = question || state || "";
-        
+
         let full_history = "";
+        const supabase = getSupabase(req);
         if (supabase) {
             const { data, error } = await supabase
                 .from('journal_slates')
@@ -229,16 +250,17 @@ app.post('/api/memory/recover', async (req, res) => {
         const result = await proxyFetch(`${FASTAPI_URL}/api/recover`, 'POST', {
             profile: req.userProfile,
             query,
-            full_history
+            full_history,
+            token: req.userToken
         });
         res.status(200).json(result);
     } catch (error) {
         console.error('Oracle Pipeline Error:', error);
         // Graceful Degradation: return a structured fail state rather than outright breaking UI
-        res.status(500).json({ 
-            status: 'error', 
-            message: 'The Oracle bridge is temporarily unresponsive. Data remains safe.', 
-            details: error.message || error 
+        res.status(500).json({
+            status: 'error',
+            message: 'The Oracle bridge is temporarily unresponsive. Data remains safe.',
+            details: error.message || error
         });
     }
 });
@@ -247,6 +269,7 @@ app.post('/api/memory/recover', async (req, res) => {
 app.get('/api/memory/blindspots', async (req, res) => {
     try {
         let full_history = "";
+        const supabase = getSupabase(req);
         if (supabase) {
             const { data, error } = await supabase
                 .from('journal_slates')
@@ -263,7 +286,8 @@ app.get('/api/memory/blindspots', async (req, res) => {
         const result = await proxyFetch(`${FASTAPI_URL}/api/blindspots`, 'POST', {
             profile: req.userProfile,
             force_refresh: req.query.force_refresh === 'true' || req.query.force_refresh === true,
-            full_history: full_history
+            full_history: full_history,
+            token: req.userToken
         });
         res.status(200).json(result);
     } catch (error) {
@@ -281,6 +305,7 @@ app.put('/api/memory/update', async (req, res) => {
         }
 
         let databaseRecord = null;
+        const supabase = getSupabase(req);
         if (supabase && entryId) {
             const { data, error } = await supabase
                 .from('journal_slates')
@@ -302,6 +327,7 @@ app.put('/api/memory/update', async (req, res) => {
             entryId: entryId || null,
             originalText: originalText || '',
             newText: newText.trim(),
+            token: req.userToken
         });
 
         res.status(200).json({
@@ -323,6 +349,7 @@ app.post('/api/memory/forget', async (req, res) => {
             return res.status(400).json({ error: "Missing 'topic' or 'entryId' in request body." });
         }
 
+        const supabase = getSupabase(req);
         if (supabase && entryId) {
             const { error } = await supabase
                 .from('journal_slates')
@@ -339,7 +366,8 @@ app.post('/api/memory/forget', async (req, res) => {
         const result = await proxyFetch(`${FASTAPI_URL}/api/forget`, 'POST', {
             profile: req.userProfile,
             topic: topic || "",
-            entryId: entryId || null
+            entryId: entryId || null,
+            token: req.userToken
         });
         res.status(200).json(result);
     } catch (error) {
@@ -356,7 +384,8 @@ app.post('/api/memory/generate_feedback', async (req, res) => {
             profile: req.userProfile,
             helpful: !!helpful,
             context: context || "",
-            scenario: scenario || ""
+            scenario: scenario || "",
+            token: req.userToken
         });
         res.status(200).json(result);
     } catch (error) {
@@ -369,7 +398,7 @@ app.post('/api/memory/generate_feedback', async (req, res) => {
 app.post('/api/memory/improve', async (req, res) => {
     try {
         const { helpful, context, lookup_token } = req.body;
-        
+
         // Use crypto properly for hash generation in JS if token is missing
         const final_token = lookup_token || crypto.createHash('sha256').update(context || "").digest('hex');
 
@@ -377,7 +406,8 @@ app.post('/api/memory/improve', async (req, res) => {
             profile: req.userProfile,
             helpful: !!helpful,
             context: context || "",
-            lookup_token: final_token
+            lookup_token: final_token,
+            token: req.userToken
         });
         res.status(200).json(result);
     } catch (error) {

@@ -163,6 +163,32 @@ function EditModal({ entry, onClose, onUpdated }) {
   );
 }
 
+/* ── Tripwire Alert Modal ───────────────────────────────────── */
+function TripwireModal({ alertData, onGotIt, onDiscard }) {
+  if (!alertData) return null;
+  const { pattern } = alertData;
+  return (
+    <div className="slate-modal-overlay" role="presentation">
+      <div className="slate-modal" role="dialog" aria-modal="true" aria-label="Tripwire Alert">
+        <div className="slate-modal__header">
+          <div>
+            <p className="slate-modal__title" style={{ color: '#ff4d4f' }}>⚠️ Oracle Tripwire</p>
+            <p className="slate-modal__meta">You are entering a known friction loop.</p>
+          </div>
+        </div>
+        <div className="slate-modal__editor-wrap" style={{ padding: '16px', color: '#e5e7eb' }}>
+          <p style={{ marginBottom: '8px', fontWeight: 'bold' }}>{pattern?.title}</p>
+          <p style={{ opacity: 0.8 }}>{pattern?.description}</p>
+        </div>
+        <div className="slate-modal__footer" style={{ marginTop: '16px' }}>
+          <button className="slate-modal__btn-cancel" onClick={onDiscard}>Discard Entry</button>
+          <button className="slate-modal__btn-update" style={{ background: '#ff4d4f', borderColor: '#ff4d4f', color: '#fff' }} onClick={onGotIt}>Got it, thanks</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Voice Sanctuary Overlay ────────────────────────────────── */
 function VoiceSanctuary({ 
   orbState, 
@@ -450,6 +476,7 @@ export default function SlateSection() {
   const [voiceReviewMode, setVoiceReviewMode] = useState(false);
   const [safeguardTopic, setSafeguardTopic]   = useState(null); // For global reset
   const [safeguardEntry, setSafeguardEntry]   = useState(null); // For contextual deletion
+  const [tripwireAlert, setTripwireAlert]     = useState(null);
   
   // Contextual Deletion Transition State
   const [fadingId, setFadingId] = useState(null);
@@ -533,14 +560,7 @@ export default function SlateSection() {
     }
   }, [activeMode]);
 
-  const handleSubmit = useCallback((e) => {
-    if (e && e.preventDefault) {
-      e.preventDefault();
-    }
-    if (e && e.stopPropagation) {
-      e.stopPropagation();
-    }
-    
+  const executeSubmit = useCallback((forceSave) => {
     if (!draft.trim() || isSubmitting) return;
 
     if (orbState === 'listening') stopListening();
@@ -552,8 +572,18 @@ export default function SlateSection() {
 
     setSubmitting(true);
 
-    submitMemory(activeInputString, wasVoice, isSnippet, (result) => {
+    submitMemory(activeInputString, wasVoice, isSnippet, forceSave, (result) => {
       setSubmitting(false);
+
+      if (!forceSave && result && result.status === 'tripwire_alert') {
+        if (wasVoice) speakFeedback('Tripwire alert detected.');
+        setTripwireAlert(result.data);
+        return;
+      }
+
+      if (forceSave) {
+        setTripwireAlert(null);
+      }
 
       if (result && result.status === 'forget_confirmation' && result.data && result.data.topic) {
         if (wasVoice) speakFeedback('I understand. Please confirm this deletion.');
@@ -583,6 +613,16 @@ export default function SlateSection() {
       }, 80);
     });
   }, [draft, isSubmitting, inputMode, activeMode, orbState, stopListening, resetTranscript, submitMemory]);
+
+  const handleSubmit = useCallback((e) => {
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
+    if (e && e.stopPropagation) {
+      e.stopPropagation();
+    }
+    executeSubmit(false);
+  }, [executeSubmit]);
 
   const handleKeyDown = useCallback((e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -885,6 +925,23 @@ export default function SlateSection() {
               setSafeguardTopic(null);
             }
           }} 
+        />
+      )}
+
+      {/* ── Tripwire Modal ── */}
+      {tripwireAlert && (
+        <TripwireModal 
+          alertData={tripwireAlert} 
+          onDiscard={() => {
+            setTripwireAlert(null);
+            setDraft('');
+            setCharCount(0);
+            resetTranscript();
+            setVoiceReviewMode(false);
+          }}
+          onGotIt={() => {
+            executeSubmit(true);
+          }}
         />
       )}
 

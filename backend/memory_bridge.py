@@ -13,7 +13,15 @@ from pydantic import BaseModel, Field, ConfigDict
 from dotenv import load_dotenv
 
 import cognee
-from litellm import acompletion
+from litellm import acompletion, aembedding
+from supabase import create_client, Client
+
+def cosine_similarity(v1, v2):
+    dot_product = sum(a * b for a, b in zip(v1, v2))
+    magnitude1 = sum(a * a for a in v1) ** 0.5
+    magnitude2 = sum(b * b for b in v2) ** 0.5
+    if magnitude1 * magnitude2 == 0: return 0
+    return dot_product / (magnitude1 * magnitude2)
 
 # Load environment variables dynamically
 load_dotenv()
@@ -22,9 +30,6 @@ if os.getenv("LLM_API_KEY") and not os.getenv("GEMINI_API_KEY"):
 
 import difflib
 import re
-
-# Global lock for thread safety in database operations
-cognee_lock = asyncio.Lock()
 
 def is_forbidden(text, forbidden_topics):
     if not forbidden_topics:
@@ -58,48 +63,84 @@ def is_forbidden(text, forbidden_topics):
                 
     return False
 
-# Cache helper functions for Blindspots
-def get_blindspots_cache_path(profile: str) -> str:
-    dir_path = os.path.join(os.path.dirname(__file__), "vector_sanctuary", f"user_{profile}")
-    os.makedirs(dir_path, exist_ok=True)
-    return os.path.join(dir_path, "blindspots_cache.json")
+from supabase import create_client, Client, ClientOptions
 
-def mark_blindspots_stale(profile: str):
-    cache_path = get_blindspots_cache_path(profile)
+# Supabase Client Initialization
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_ANON_KEY")
+
+def get_supabase(token: str = None) -> Client:
+    if not token:
+        return create_client(supabase_url, supabase_key)
+    return create_client(supabase_url, supabase_key, options=ClientOptions(
+        headers={"Authorization": f"Bearer {token}"}
+    ))
+
+# Helper functions for Supabase state
+def get_manifest(profile: str, token: str = None) -> dict:
     try:
-        if os.path.exists(cache_path):
-            with open(cache_path, "r") as f:
-                data = json.load(f)
-            data["is_stale"] = True
-            with open(cache_path, "w") as f:
-                json.dump(data, f)
-        else:
-            with open(cache_path, "w") as f:
-                json.dump({"is_stale": True, "data": []}, f)
+        sb = get_supabase(token)
+        response = sb.table("user_metadata").select("manifest").eq("profile", profile).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0].get("manifest") or {}
+    except Exception as e:
+        print(f"Error reading manifest from supabase: {e}")
+    return {}
+
+def save_manifest(profile: str, manifest_data: dict, token: str = None):
+    try:
+        sb = get_supabase(token)
+        sb.table("user_metadata").upsert({"profile": profile, "manifest": manifest_data}).execute()
+    except Exception as e:
+        print(f"Error saving manifest to supabase: {e}")
+
+def get_blindspots_cache(profile: str, token: str = None) -> tuple:
+    try:
+        sb = get_supabase(token)
+        response = sb.table("user_metadata").select("blindspots_cache").eq("profile", profile).execute()
+        if response.data and len(response.data) > 0:
+            cache = response.data[0].get("blindspots_cache") or {}
+            is_stale = cache.get("is_stale", True)
+            data = cache.get("data", [])
+            last_synced = cache.get("last_synced")
+            return is_stale, data, last_synced
+    except Exception as e:
+        print(f"Error reading blindspots from supabase: {e}")
+    return True, [], None
+
+def save_blindspots_cache(profile: str, data: list, is_stale: bool, last_synced: str = None, token: str = None):
+    try:
+        sb = get_supabase(token)
+        cache_data = {
+            "is_stale": is_stale,
+            "data": data,
+            "last_synced": last_synced
+        }
+        sb.table("user_metadata").upsert({"profile": profile, "blindspots_cache": cache_data}).execute()
+    except Exception as e:
+        print(f"Error saving blindspots to supabase: {e}")
+
+def mark_blindspots_stale(profile: str, token: str = None):
+    try:
+        is_stale, data, last_synced = get_blindspots_cache(profile, token)
+        save_blindspots_cache(profile, data, True, last_synced, token)
     except Exception as e:
         print(f"Failed to mark blindspots cache as stale: {e}")
 
-async def background_cognify_loop():
-    dataset_name = "user_default_user"
-    while True:
-        try:
-            await asyncio.sleep(1800)  # 30 mins
-            print(f"[Cron] Waking up to process pending knowledge graph data for {dataset_name}...")
-            async with cognee_lock:
-                await cognee.cognify(datasets=[dataset_name])
-            print(f"[Cron] Knowledge graph built successfully.")
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            print(f"[Cron] Error during background cognify: {e}. Will retry next cycle.")
+# Async Background Task for Cloud Graph Building
+async def trigger_cloud_cognify(dataset_name: str):
+    print(f"Triggering asynchronous cloud graph build for {dataset_name}...")
+    try:
+        await cognee.cognify(datasets=[dataset_name])
+        print(f"Successfully cognified {dataset_name} on cloud.")
+    except Exception as e:
+        print(f"Cloud cognify failed for {dataset_name}: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Memory bridge v3 initialized. Architecture locked for strict deterministic retention.")
-    task = asyncio.create_task(background_cognify_loop())
+    print("Memory bridge v3 initialized for Cognee Cloud & Multi-Tenant architecture.")
     yield
     print("Memory bridge v3 shutting down.")
-    task.cancel()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -109,12 +150,15 @@ class IngestRequest(BaseModel):
     text: str
     timestamp: Optional[str] = None
     isSnippet: Optional[bool] = False
+    force_save: Optional[bool] = False
+    token: Optional[str] = None
     model_config = ConfigDict(extra="ignore")
 
 class RecoverRequest(BaseModel):
     profile: str
     query: Optional[str] = ""
     full_history: Optional[str] = ""
+    token: Optional[str] = None
     model_config = ConfigDict(extra="ignore")
 
 class UpdateRequest(BaseModel):
@@ -123,11 +167,13 @@ class UpdateRequest(BaseModel):
     new_text: Optional[str] = Field(None, alias="newText")
     original_text: Optional[str] = Field(None, alias="originalText")
     timestamp: Optional[str] = None
+    token: Optional[str] = None
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 class ForgetConfirmRequest(BaseModel):
     profile: str
     topic: str
+    token: Optional[str] = None
     model_config = ConfigDict(extra="ignore")
 
 class ImproveRequest(BaseModel):
@@ -135,6 +181,7 @@ class ImproveRequest(BaseModel):
     helpful: bool
     context: Optional[str] = ""
     lookup_token: Optional[str] = None
+    token: Optional[str] = None
     model_config = ConfigDict(extra="ignore")
 
 class GenerateFeedbackRequest(BaseModel):
@@ -142,12 +189,14 @@ class GenerateFeedbackRequest(BaseModel):
     helpful: bool
     context: Optional[str] = ""
     scenario: Optional[str] = ""
+    token: Optional[str] = None
     model_config = ConfigDict(extra="ignore")
 
 class BlindspotsRequest(BaseModel):
     profile: str
     force_refresh: Optional[bool] = False
     full_history: Optional[str] = ""
+    token: Optional[str] = None
     model_config = ConfigDict(extra="ignore")
 
 @app.exception_handler(Exception)
@@ -169,7 +218,7 @@ async def health_check(profile: Optional[str] = "default"):
     }
 
 @app.post("/api/ingest")
-async def ingest_memory(req: IngestRequest):
+async def ingest_memory(req: IngestRequest, background_tasks: BackgroundTasks):
     dataset_name = f"user_{req.profile}"
     
     heading = None
@@ -190,16 +239,61 @@ async def ingest_memory(req: IngestRequest):
     # Wrapping entry with structural classification metadata tags to eliminate ontology drift
     ts_str = f"[Timestamp: {req.timestamp}] " if req.timestamp else ""
     structured_entry = f"{ts_str}[Classification: UserSlateEntry] {req.text.strip()}"
+    
+    tripwire_alert = None
+    if not req.force_save:
+        try:
+            # Tripwire Check: Compare against negative blindspots
+            is_stale, blindspots_data, _ = get_blindspots_cache(req.profile, req.token)
+            negative_patterns = [b for b in blindspots_data if isinstance(b, dict) and b.get("type") == "negative"]
+            print(f"DEBUG: Found {len(negative_patterns)} negative patterns in cache for {req.profile}")
+            
+            if negative_patterns:
+                # Generate embedding for current input
+                input_embed_res = await aembedding(
+                    model=os.getenv("EMBEDDING_MODEL", "gemini/gemini-embedding-001"),
+                    input=req.text.strip()
+                )
+                input_vector = input_embed_res.data[0]["embedding"]
+                
+                # Check similarity against all negative patterns
+                for pattern in negative_patterns:
+                    pattern_text = f"{pattern.get('title', '')} - {pattern.get('description', '')}"
+                    pattern_embed_res = await aembedding(
+                        model=os.getenv("EMBEDDING_MODEL", "gemini/gemini-embedding-001"),
+                        input=pattern_text
+                    )
+                    pattern_vector = pattern_embed_res.data[0]["embedding"]
+                    
+                    similarity = cosine_similarity(input_vector, pattern_vector)
+                    print(f"DEBUG: Similarity against '{pattern.get('title')}' = {similarity}")
+                    if similarity > 0.56:
+                        tripwire_alert = {
+                            "pattern": pattern,
+                            "similarity": similarity
+                        }
+                        break
+        except Exception as e:
+            print(f"Tripwire evaluation failed (skipping): {e}")
+
+    if tripwire_alert:
+        return {
+            "status": "tripwire_alert",
+            "message": "Tripwire loop detected.",
+            "data": tripwire_alert
+        }
 
     try:
-        async with cognee_lock:
-            # We must use cognee.add to strictly avoid cognify's concurrent LLM API rate limit burst.
-            # New snippets will be handled dynamically via full_history context mapping.
-            await cognee.add(structured_entry, dataset_name=dataset_name)
-        mark_blindspots_stale(req.profile)
+        # Push to Cognee Cloud instantly
+        await cognee.add(structured_entry, dataset_name=dataset_name)
+        mark_blindspots_stale(req.profile, req.token)
+        
+        # Trigger graph building immediately in the background without blocking the user
+        background_tasks.add_task(trigger_cloud_cognify, dataset_name)
+        
         return {
             "status": "success",
-            "message": "Stored securely with taxonomy prefix.",
+            "message": "Stored securely on cloud and triggered graph build.",
             "heading": heading,
             "summary_snippet": summary_snippet
         }
@@ -215,58 +309,55 @@ async def recover_memory(req: RecoverRequest):
         # ARCHITECTURAL MANDATE 2: Broad-Spectrum Structural Retrieval Pass
         # Concurrent execution of dual lookups to prevent vector dropout.
         try:
-            async with cognee_lock:
-                target_specific = req.query if req.query else "What choices, habits, or preferences matter most to this user?"
-                target_broad = "Comprehensive history of [Classification: UserSlateEntry], diary entries, watched media, preferences, and life logs."
-                
-                def handle_result(res):
-                    if isinstance(res, Exception):
-                        if "DatasetNotFoundError" in str(res) or "404" in str(res):
-                            return []
-                        raise res
-                    return res
+            target_specific = req.query if req.query else "What choices, habits, or preferences matter most to this user?"
+            target_broad = "Comprehensive history of [Classification: UserSlateEntry], diary entries, watched media, preferences, and life logs."
+            
+            def handle_result(res):
+                if isinstance(res, Exception):
+                    if "DatasetNotFoundError" in str(res) or "404" in str(res):
+                        return []
+                    raise res
+                return res
 
+            async def safe_recall(target):
                 try:
-                    res1 = await cognee.recall(target_specific, datasets=[dataset_name])
+                    return await cognee.recall(target, datasets=[dataset_name])
                 except Exception as e:
-                    res1 = e
-                    
-                try:
-                    res2 = await cognee.recall(target_broad, datasets=[dataset_name])
-                except Exception as e:
-                    res2 = e
-                    
-                context_specific = handle_result(res1)
-                context_broad = handle_result(res2)
+                    return e
+
+            res1, res2 = await asyncio.gather(
+                safe_recall(target_specific),
+                safe_recall(target_broad)
+            )
+            
+            context_specific = handle_result(res1)
+            context_broad = handle_result(res2)
                 
         except Exception as recall_err:
             raise recall_err
         
-        # Manifest Read: System feedback logs & Semantic Amnesia Vault
+        # Manifest Read: System feedback logs & Semantic Amnesia Vault from Supabase
         manifest_history_lines = []
         forbidden_entities = set()
         
         try:
-            manifest_path = f"oracle_manifest_{dataset_name}.json"
-            if os.path.exists(manifest_path):
-                with open(manifest_path, "r") as f:
-                    manifest_data = json.load(f)
-                    for k, val in manifest_data.items():
-                        # ARCHITECTURAL MANDATE 4: Amnesia Vault Aggregation
-                        if val.get("status") == "forgotten":
-                            topic = val.get("topic")
-                            if topic:
-                                for t in str(topic).split(','):
-                                    clean_t = t.strip(' .!?,').lower()
-                                    if clean_t:
-                                        forbidden_entities.add(clean_t)
-                            continue
-                            
-                        # Recommendation Context (Not User Data)
-                        helpful_signal = val.get("helpful")
-                        summary_text = val.get('summary', '')
-                        helpful_str = "true" if helpful_signal else "false"
-                        manifest_history_lines.append(f"- {summary_text} (helpful: {helpful_str})")
+            manifest_data = get_manifest(req.profile, req.token)
+            for k, val in manifest_data.items():
+                # ARCHITECTURAL MANDATE 4: Amnesia Vault Aggregation
+                if val.get("status") == "forgotten":
+                    topic = val.get("topic")
+                    if topic:
+                        for t in str(topic).split(','):
+                            clean_t = t.strip(' .!?,').lower()
+                            if clean_t:
+                                forbidden_entities.add(clean_t)
+                    continue
+                    
+                # Recommendation Context (Not User Data)
+                helpful_signal = val.get("helpful")
+                summary_text = val.get('summary', '')
+                helpful_str = "true" if helpful_signal else "false"
+                manifest_history_lines.append(f"- {summary_text} (helpful: {helpful_str})")
         except Exception as e:
             print(f"Failed to load manifest history: {e}")
             
@@ -380,25 +471,22 @@ async def recover_memory(req: RecoverRequest):
         raise HTTPException(status_code=500, detail=f"Recover Loop failed: {str(e)}")
 
 
-async def _generate_blindspots_logic(profile: str, full_history: str = "") -> list:
+async def _generate_blindspots_logic(profile: str, full_history: str = "", token: str = None) -> list:
     dataset_name = f"user_{profile}"
     
     try:
-        # Manifest Read: Semantic Amnesia Vault
+        # Manifest Read: Semantic Amnesia Vault from Supabase
         forbidden_entities = set()
         try:
-            manifest_path = f"oracle_manifest_{dataset_name}.json"
-            if os.path.exists(manifest_path):
-                with open(manifest_path, "r") as f:
-                    manifest_data = json.load(f)
-                    for k, val in manifest_data.items():
-                        if val.get("status") == "forgotten":
-                            topic = val.get("topic")
-                            if topic:
-                                for t in str(topic).split(','):
-                                    clean_t = t.strip(' .!?,').lower()
-                                    if clean_t:
-                                        forbidden_entities.add(clean_t)
+            manifest_data = get_manifest(profile, token)
+            for k, val in manifest_data.items():
+                if val.get("status") == "forgotten":
+                    topic = val.get("topic")
+                    if topic:
+                        for t in str(topic).split(','):
+                            clean_t = t.strip(' .!?,').lower()
+                            if clean_t:
+                                forbidden_entities.add(clean_t)
         except Exception as e:
             print(f"Failed to load manifest history: {e}")
 
@@ -431,8 +519,7 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "") -> li
     graph_context_str = ""
     try:
         target_blindspots = "Identify all recurring behavioral loops, positive accelerators, negative frictions, and neutral staging blockers in the user's life history."
-        async with cognee_lock:
-            graph_context = await cognee.recall(target_blindspots, datasets=[dataset_name])
+        graph_context = await cognee.recall(target_blindspots, datasets=[dataset_name])
             
         if graph_context:
             if isinstance(graph_context, list):
@@ -504,51 +591,23 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "") -> li
 async def _background_generate_blindspots(profile: str, full_history: str = ""):
     try:
         data = await _generate_blindspots_logic(profile, full_history)
-        cache_path = get_blindspots_cache_path(profile)
-        
-        cache_content = {
-            "is_stale": False,
-            "data": data
-        }
-        with open(cache_path, "w") as f:
-            json.dump(cache_content, f)
+        last_synced = datetime.datetime.now().isoformat()
+        save_blindspots_cache(profile, data, False, last_synced)
     except Exception as e:
         print(f"Background blindspot generation failed: {e}")
 
 @app.post("/api/blindspots")
 async def get_blindspots(req: BlindspotsRequest, background_tasks: BackgroundTasks):
-    cache_path = get_blindspots_cache_path(req.profile)
-    
-    cache_exists = os.path.exists(cache_path)
-    is_stale = True
-    cached_data = []
-    last_synced = None
-
-    if cache_exists:
-        try:
-            with open(cache_path, "r") as f:
-                cache_content = json.load(f)
-                is_stale = cache_content.get("is_stale", True)
-                cached_data = cache_content.get("data", [])
-            mtime = os.path.getmtime(cache_path)
-            last_synced = datetime.datetime.fromtimestamp(mtime).isoformat()
-        except Exception:
-            pass
+    is_stale, cached_data, last_synced = get_blindspots_cache(req.profile, req.token)
             
     if req.force_refresh:
         print(f"DEBUG: Force Refresh triggered! Calculating new blindspots from {len(req.full_history)} characters of history...")
         # Synchronous execution
         try:
-            data = await _generate_blindspots_logic(req.profile, req.full_history)
+            data = await _generate_blindspots_logic(req.profile, req.full_history, req.token)
             
-            cache_content = {
-                "is_stale": False,
-                "data": data
-            }
-            with open(cache_path, "w") as f:
-                json.dump(cache_content, f)
-                
             last_synced = datetime.datetime.now().isoformat()
+            save_blindspots_cache(req.profile, data, False, last_synced, req.token)
                 
             return {
                 "status": "success",
@@ -581,9 +640,8 @@ async def update_memory(req: UpdateRequest):
     structured_entry = f"{ts_str}[Classification: UserSlateEntry]\n{req.new_text.strip()}"
     
     try:
-        async with cognee_lock:
-            await cognee.add(structured_entry, dataset_name=dataset_name)
-        mark_blindspots_stale(req.profile)
+        await cognee.add(structured_entry, dataset_name=dataset_name)
+        mark_blindspots_stale(req.profile, req.token)
         return {
             "status": "success",
             "message": "Memory successfully updated."
@@ -606,80 +664,30 @@ async def update_memory(req: UpdateRequest):
 
 @app.post("/api/forget")
 async def forget_memory(req: ForgetConfirmRequest):
-    dataset_name = f"user_{req.profile}"
     try:
-        # TRUE FORGET: Traverse Cognee SQLite and physical files to find and delete the exact data nodes
-        import sqlite3
-        import uuid
+        # TRUE FORGET for Cognee Cloud
+        # The cloud handles isolation via datasets. To fully wipe nodes without ID references,
+        # we strictly depend on the Semantic Amnesia Vault which filters it natively across the graph.
         
-        db_path = "/Users/satyaviswas/Documents/sift-recovery-engine/backend/venv/lib/python3.13/site-packages/cognee/.cognee_system/databases/cognee_db"
+        manifest = get_manifest(req.profile, req.token)
         
-        data_ids_to_forget = []
+        # ARCHITECTURAL MANDATE 4 & 5: Pure Semantic Amnesia Vault
+        # We securely register the topic in the manifest ledger and handle it dynamically in /recover
         
-        async with cognee_lock:
-            if os.path.exists(db_path):
-                try:
-                    conn = sqlite3.connect(db_path)
-                    cursor = conn.cursor()
-                    
-                    # Fetch all data items
-                    cursor.execute("SELECT id, raw_data_location FROM data")
-                    rows = cursor.fetchall()
-                    
-                    for row in rows:
-                        data_id_hex = row[0]
-                        file_path = str(row[1]).replace("file://", "")
-                        if os.path.exists(file_path):
-                            try:
-                                with open(file_path, "r", encoding="utf-8") as f:
-                                    content = f.read()
-                                    # Check if the requested topic exists in the raw ingested text
-                                    for t in req.topic.split(','):
-                                        clean_t = t.strip(' .!?,').lower()
-                                        if clean_t and clean_t in content.lower():
-                                            data_ids_to_forget.append(uuid.UUID(data_id_hex))
-                                            break # Move to next file once matched
-                            except Exception:
-                                pass
-                    conn.close()
-                except Exception as e:
-                    print(f"Error accessing sqlite db for true forget: {e}")
-
-            # Physically wipe the data, vector embeddings, and graph nodes from Cognee
-            for d_id in data_ids_to_forget:
-                try:
-                    await cognee.forget(data_id=d_id, dataset=dataset_name)
-                    print(f"Successfully forgot true data_id: {d_id}")
-                except Exception as e:
-                    print(f"Failed to forget true data_id {d_id}: {e}")
+        for t in req.topic.split(','):
+            clean_t = t.strip(' .!?,')
+            if not clean_t:
+                continue
             
-            manifest_path = f"oracle_manifest_{dataset_name}.json"
-            manifest = {}
-            if os.path.exists(manifest_path):
-                try:
-                    with open(manifest_path, "r") as f:
-                        manifest = json.load(f)
-                except Exception:
-                    pass
+            topic_hash = hashlib.sha256(f"forget_{clean_t}".encode('utf-8')).hexdigest()
+            manifest[topic_hash] = {
+                "topic": clean_t,
+                "status": "forgotten"
+            }
             
-            # ARCHITECTURAL MANDATE 4 & 5: Pure Semantic Amnesia Vault
-            # We securely register the topic in the manifest ledger and handle it dynamically in /recover
-            
-            for t in req.topic.split(','):
-                clean_t = t.strip(' .!?,')
-                if not clean_t:
-                    continue
-                
-                topic_hash = hashlib.sha256(f"forget_{clean_t}".encode('utf-8')).hexdigest()
-                manifest[topic_hash] = {
-                    "topic": clean_t,
-                    "status": "forgotten"
-                }
-                
-            with open(manifest_path, "w") as f:
-                json.dump(manifest, f)
+        save_manifest(req.profile, manifest, req.token)
         
-        mark_blindspots_stale(req.profile)
+        mark_blindspots_stale(req.profile, req.token)
         return {
             "status": "success",
             "message": f"Successfully completely erased connections related to '{req.topic}'."
@@ -760,22 +768,14 @@ async def improve_memory(req: ImproveRequest):
         # ARCHITECTURAL MANDATE 3: Complete Feedback Decoupling
         # Strict isolation: We ONLY write this feedback to the manifest. 
         # Cognee graph remains pristine and safe from AI-generated text contamination.
-        async with cognee_lock:
-            manifest_path = f"oracle_manifest_{dataset_name}.json"
-            manifest = {}
-            if os.path.exists(manifest_path):
-                try:
-                    with open(manifest_path, "r") as f:
-                        manifest = json.load(f)
-                except Exception:
-                    pass
+        manifest = get_manifest(req.profile, req.token)
 
-            manifest[context_hash] = {
-                "helpful": req.helpful,
-                "summary": summary
-            }
-            with open(manifest_path, "w") as f:
-                json.dump(manifest, f)
+        manifest[context_hash] = {
+            "helpful": req.helpful,
+            "summary": summary
+        }
+        
+        save_manifest(req.profile, manifest, req.token)
             
         return {
             "status": "success",

@@ -1,0 +1,405 @@
+/* ============================================================
+   Auth Modal — Glassmorphism auth overlay, dark + light mode
+   ============================================================ */
+
+/* ── Token layer ────────────────────────────────────────────── */
+:root {
+  --auth-overlay-bg:      rgba(8, 8, 20, 0.70);
+  --auth-modal-bg:        rgba(18, 18, 36, 0.88);
+  --auth-modal-border:    rgba(255, 255, 255, 0.10);
+  --auth-modal-shimmer:   rgba(255, 255, 255, 0.18);
+  --auth-modal-shadow:    0 40px 100px rgba(0, 0, 0, 0.60);
+  --auth-text-primary:    rgba(255, 255, 255, 0.92);
+  --auth-text-secondary:  rgba(255, 255, 255, 0.55);
+  --auth-text-muted:      rgba(255, 255, 255, 0.30);
+  --auth-tab-bg:          rgba(255, 255, 255, 0.05);
+  --auth-tab-active-bg:   rgba(255, 255, 255, 0.10);
+  --auth-tab-color:       rgba(255, 255, 255, 0.45);
+  --auth-tab-active-color: rgba(255, 255, 255, 0.95);
+  --auth-input-bg:        rgba(255, 255, 255, 0.06);
+  --auth-input-border:    rgba(255, 255, 255, 0.10);
+  --auth-input-focus-border: rgba(245, 201, 126, 0.55);
+  --auth-input-focus-bg:  rgba(255, 255, 255, 0.09);
+  --auth-input-placeholder: rgba(255, 255, 255, 0.25);
+  --auth-close-bg:        rgba(255, 255, 255, 0.06);
+  --auth-close-border:    rgba(255, 255, 255, 0.10);
+  --auth-close-color:     rgba(255, 255, 255, 0.50);
+  --auth-close-hover-bg:  rgba(255, 255, 255, 0.12);
+  --auth-close-hover-color: rgba(255, 255, 255, 0.85);
+  --auth-divider-line:    rgba(255, 255, 255, 0.09);
+  --auth-divider-text:    rgba(255, 255, 255, 0.30);
+  --auth-google-bg:       rgba(255, 255, 255, 0.06);
+  --auth-google-border:   rgba(255, 255, 255, 0.12);
+  --auth-google-color:    rgba(255, 255, 255, 0.88);
+  --auth-google-hover-bg: rgba(255, 255, 255, 0.10);
+  --auth-google-hover-border: rgba(255, 255, 255, 0.20);
+  --auth-footer-color:    rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="light"] {
+  --auth-overlay-bg:      rgba(160, 155, 140, 0.55);
+  --auth-modal-bg:        rgba(255, 254, 250, 0.95);
+  --auth-modal-border:    rgba(60, 60, 100, 0.10);
+  --auth-modal-shimmer:   rgba(200, 150, 50, 0.15);
+  --auth-modal-shadow:    0 40px 100px rgba(40, 40, 80, 0.20), 0 4px 24px rgba(40, 40, 80, 0.10);
+  --auth-text-primary:    hsl(220, 25%, 12%);
+  --auth-text-secondary:  hsl(220, 15%, 38%);
+  --auth-text-muted:      hsl(220, 10%, 55%);
+  --auth-tab-bg:          rgba(60, 60, 100, 0.06);
+  --auth-tab-active-bg:   rgba(60, 60, 100, 0.10);
+  --auth-tab-color:       hsl(220, 12%, 50%);
+  --auth-tab-active-color: hsl(220, 25%, 12%);
+  --auth-input-bg:        rgba(255, 255, 255, 0.80);
+  --auth-input-border:    rgba(60, 60, 100, 0.14);
+  --auth-input-focus-border: rgba(190, 120, 30, 0.55);
+  --auth-input-focus-bg:  rgba(255, 255, 255, 0.95);
+  --auth-input-placeholder: hsl(220, 10%, 65%);
+  --auth-close-bg:        rgba(60, 60, 100, 0.06);
+  --auth-close-border:    rgba(60, 60, 100, 0.10);
+  --auth-close-color:     hsl(220, 10%, 55%);
+  --auth-close-hover-bg:  rgba(60, 60, 100, 0.10);
+  --auth-close-hover-color: hsl(220, 25%, 12%);
+  --auth-divider-line:    rgba(60, 60, 100, 0.10);
+  --auth-divider-text:    hsl(220, 10%, 60%);
+  --auth-google-bg:       rgba(255, 255, 255, 0.80);
+  --auth-google-border:   rgba(60, 60, 100, 0.14);
+  --auth-google-color:    hsl(220, 20%, 20%);
+  --auth-google-hover-bg: rgba(255, 255, 255, 0.95);
+  --auth-google-hover-border: rgba(60, 60, 100, 0.24);
+  --auth-footer-color:    hsl(220, 10%, 58%);
+}
+
+/* ── Overlay ────────────────────────────────────────────────── */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--auth-overlay-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: auth-overlay-in 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: background 350ms;
+}
+
+@keyframes auth-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Modal Card ─────────────────────────────────────────────── */
+.auth-modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--auth-modal-bg);
+  border: 1px solid var(--auth-modal-border);
+  border-radius: 24px;
+  padding: 32px 28px 28px;
+  box-shadow: var(--auth-modal-shadow);
+  animation: auth-modal-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  position: relative;
+  overflow: hidden;
+  transition: background 350ms, border-color 350ms, box-shadow 350ms;
+}
+
+/* Top-edge shimmer */
+.auth-modal::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--auth-modal-shimmer) 50%, transparent 100%);
+}
+
+@keyframes auth-modal-in {
+  from { opacity: 0; transform: scale(0.94) translateY(20px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Mobile: bottom-sheet style */
+@media (max-width: 480px) {
+  .auth-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .auth-modal {
+    max-width: 100%;
+    border-radius: 24px 24px 0 0;
+    padding: 28px 20px 40px;
+    border-bottom: none;
+  }
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+.auth-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.auth-modal__logo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.auth-modal__logo-text {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #d4873b 0%, #b86020 60%, #8a4015 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="dark"] .auth-modal__logo-text {
+  background: linear-gradient(135deg, #f5c97e 0%, #e8a857 60%, #c97d3e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.auth-modal__logo-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d4873b, #8a4015);
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 5px;
+}
+
+[data-theme="dark"] .auth-modal__logo-dot {
+  background: linear-gradient(135deg, #f5c97e, #c97d3e);
+}
+
+.auth-modal__close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--auth-close-border);
+  background: var(--auth-close-bg);
+  color: var(--auth-close-color);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 180ms, color 180ms, border-color 180ms;
+}
+.auth-modal__close:hover {
+  background: var(--auth-close-hover-bg);
+  color: var(--auth-close-hover-color);
+}
+
+/* ── Tab Switcher ───────────────────────────────────────────── */
+.auth-modal__tabs {
+  display: flex;
+  background: var(--auth-tab-bg);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 24px;
+  gap: 4px;
+  transition: background 350ms;
+}
+
+.auth-modal__tab {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--auth-tab-color);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 180ms, color 180ms;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.auth-modal__tab--active {
+  background: var(--auth-tab-active-bg);
+  color: var(--auth-tab-active-color);
+}
+
+/* ── Form ───────────────────────────────────────────────────── */
+.auth-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-modal__label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--auth-text-secondary);
+  letter-spacing: 0.02em;
+  transition: color 350ms;
+}
+
+.auth-modal__input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--auth-input-border);
+  background: var(--auth-input-bg);
+  color: var(--auth-text-primary);
+  font-size: 0.9375rem;
+  font-family: 'Inter', system-ui, sans-serif;
+  transition: border-color 180ms, background 180ms, color 350ms;
+  box-sizing: border-box;
+}
+
+.auth-modal__input::placeholder { color: var(--auth-input-placeholder); }
+.auth-modal__input:focus {
+  outline: none;
+  border-color: var(--auth-input-focus-border);
+  background: var(--auth-input-focus-bg);
+}
+.auth-modal__input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Feedback ───────────────────────────────────────────────── */
+.auth-modal__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.10);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  color: hsl(0, 70%, 52%);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+[data-theme="dark"] .auth-modal__error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+
+.auth-modal__error svg { flex-shrink: 0; margin-top: 1px; }
+
+.auth-modal__success {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(22, 163, 74, 0.08);
+  border: 1px solid rgba(22, 163, 74, 0.22);
+  color: hsl(142, 65%, 30%);
+  font-size: 0.8125rem;
+}
+
+[data-theme="dark"] .auth-modal__success {
+  background: rgba(52, 211, 153, 0.10);
+  border-color: rgba(52, 211, 153, 0.25);
+  color: #6ee7b7;
+}
+
+/* ── Primary Button ─────────────────────────────────────────── */
+.auth-modal__btn-primary {
+  width: 100%;
+  padding: 13px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, hsl(38, 88%, 58%) 0%, hsl(32, 82%, 44%) 100%);
+  color: hsl(30, 40%, 8%);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-family: 'Inter', system-ui, sans-serif;
+  cursor: pointer;
+  transition: opacity 180ms, transform 120ms;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  margin-top: 4px;
+  box-shadow: 0 4px 16px rgba(200, 130, 30, 0.25);
+}
+.auth-modal__btn-primary:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(200, 130, 30, 0.35);
+}
+.auth-modal__btn-primary:active:not(:disabled) { transform: translateY(0); }
+.auth-modal__btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+.auth-modal__spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(26, 14, 0, 0.3);
+  border-top-color: rgba(26, 14, 0, 0.9);
+  border-radius: 50%;
+  animation: auth-spin 0.65s linear infinite;
+}
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+
+/* ── Divider ────────────────────────────────────────────────── */
+.auth-modal__divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+}
+.auth-modal__divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--auth-divider-line);
+  transition: background 350ms;
+}
+.auth-modal__divider-text {
+  font-size: 0.75rem;
+  color: var(--auth-divider-text);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: color 350ms;
+}
+
+/* ── Google Button ──────────────────────────────────────────── */
+.auth-modal__btn-google {
+  width: 100%;
+  padding: 13px;
+  border-radius: 12px;
+  border: 1px solid var(--auth-google-border);
+  background: var(--auth-google-bg);
+  color: var(--auth-google-color);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  font-family: 'Inter', system-ui, sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: background 180ms, border-color 180ms, transform 120ms, color 350ms;
+  min-height: 48px;
+}
+.auth-modal__btn-google:hover:not(:disabled) {
+  background: var(--auth-google-hover-bg);
+  border-color: var(--auth-google-hover-border);
+  transform: translateY(-1px);
+}
+.auth-modal__btn-google:active:not(:disabled) { transform: translateY(0); }
+.auth-modal__btn-google:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Footer note ────────────────────────────────────────────── */
+.auth-modal__footer-note {
+  margin-top: 16px;
+  font-size: 0.72rem;
+  color: var(--auth-footer-color);
+  text-align: center;
+  line-height: 1.5;
+  transition: color 350ms;
+}

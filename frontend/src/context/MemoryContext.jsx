@@ -1,11 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { fetchTimeline, ingestEntry, updateEntry, forgetMemory, recoverMemory, improveMemory, generateFeedback } from '../utils/api';
+import { useAuth } from './AuthContext';
 
 const ORACLE_CACHE_KEY = 'sift_oracle_cards_stream';
 
 const MemoryContext = createContext();
 
 export function MemoryProvider({ children }) {
+  const { user } = useAuth();
   const [journalTimelineStream, setJournalTimelineStream] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -78,16 +80,31 @@ export function MemoryProvider({ children }) {
     }
   }, []);
 
+  // Reload timeline whenever the logged-in user changes
   useEffect(() => {
-    loadTimeline();
-  }, [loadTimeline]);
+    // Clear previous user's data immediately to prevent leakage
+    setJournalTimelineStream([]);
+    setOracleCardsStream([]);
+    setError(null);
+    if (user) {
+      loadTimeline();
+    } else {
+      setIsLoading(false);
+    }
+  }, [user, loadTimeline]);
 
   // Network Dispatch: Submit
-  const submitMemory = useCallback(async (text, isVoice = false, isSnippet = false, onComplete = null) => {
+  const submitMemory = useCallback(async (text, isVoice = false, isSnippet = false, forceSave = false, onComplete = null) => {
     try {
       const timestamp = new Date().toISOString();
-      const result = await ingestEntry({ text, isSnippet, timestamp });
+      const result = await ingestEntry({ text, isSnippet, timestamp, force_save: forceSave });
       
+      // Intercept tripwire alert
+      if (result && result.status === 'tripwire_alert') {
+        if (onComplete) onComplete(result);
+        return; // Halt ingestion and let UI show popup
+      }
+
       // Intercept verification request
       if (result && result.status === 'verification_required') {
         setForgetVerificationStream({
