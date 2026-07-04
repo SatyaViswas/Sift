@@ -331,7 +331,7 @@ async def recover_memory(req: RecoverRequest):
 
             async def safe_recall(target):
                 try:
-                    return await cognee.recall(target, datasets=[dataset_name], only_context=True, top_k=150)
+                    return await cognee.recall(target, datasets=[dataset_name], only_context=True, top_k=15)
                 except Exception as e:
                     return e
 
@@ -540,7 +540,7 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "", token
     try:
         # ARCHITECTURAL MANDATE 2: Broad-Spectrum Retrieval
         target_blindspots = "Comprehensive analysis of behavior, recurring thoughts, choices, emotional blocks, and routines."
-        graph_context = await cognee.recall(target_blindspots, datasets=[dataset_name], only_context=True, top_k=150)
+        graph_context = await cognee.recall(target_blindspots, datasets=[dataset_name], only_context=True, top_k=15)
             
         # Convert graph context to string
         if isinstance(graph_context, list):
