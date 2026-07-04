@@ -26,7 +26,17 @@ export function MemoryProvider({ children }) {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed.date === new Date().toLocaleDateString()) {
-          return parsed.cards;
+          // If the page was reloaded while a query was pending, mark it as aborted
+          return parsed.cards.map(card => {
+            if (card.type === 'pending' || !card.answer) {
+              return {
+                ...card,
+                answer: { text: "Query aborted due to page reload. The Oracle was disconnected.", isError: true },
+                type: 'text'
+              };
+            }
+            return card;
+          });
         }
       }
     } catch (e) {
@@ -94,9 +104,8 @@ export function MemoryProvider({ children }) {
 
   // Reload timeline whenever the logged-in user changes
   useEffect(() => {
-    // Clear previous user's data immediately to prevent leakage
+    // Clear previous user's timeline data immediately to prevent leakage
     setJournalTimelineStream([]);
-    setOracleCardsStream([]);
     setError(null);
     if (user) {
       loadTimeline();
@@ -247,6 +256,11 @@ export function MemoryProvider({ children }) {
         return card;
       }));
     } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log('Oracle query aborted by user.');
+        return;
+      }
+      
       console.error('Oracle failed:', err);
       const is404 = err.message && err.message.includes('404');
       
