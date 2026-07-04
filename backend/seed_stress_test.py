@@ -162,10 +162,6 @@ async def run_authentic_seeder():
     
     # Batch entries into monthly summary logs to prevent parallel LLM requests per entry
     for idx, (month, entries) in enumerate(cognee_monthly_logs.items(), 1):
-        if idx < 35:
-            print(f"👉 Skipping Month {idx}/{total_months} [{month}] (Already processed)")
-            continue
-            
         print(f"👉 Processing Month {idx}/{total_months} [{month}] ({len(entries)} entries)")
         
         # Combine all daily entries for this month into one single document
