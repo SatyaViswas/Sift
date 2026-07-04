@@ -63,8 +63,6 @@ export default function OracleSection() {
     return <div className="oracle-md-container">{elements}</div>;
   };
 
-  };
-
   const QUICK_PROMPTS = [
     "I am fried, what should I do?",
     "What patterns have you noticed?",
