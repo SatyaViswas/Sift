@@ -172,6 +172,29 @@ export default function BlindspotSection() {
                   )}
                 </div>
 
+                {insight.historical_evidence && insight.historical_evidence.length > 0 && (
+                  <details className="blindspot-card__evidence-dropdown">
+                    <summary className="blindspot-card__evidence-summary">
+                      <span>Historical Evidence ({insight.historical_evidence.length})</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="chevron-icon"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </summary>
+                    <ul className="evidence-list">
+                      {insight.historical_evidence.map((ev, idx) => (
+                        <li key={idx} className="evidence-list__item">
+                          {typeof ev === 'object' ? (
+                            <>
+                              <span className="evidence-date">{ev.date}</span>
+                              <span className="evidence-quote">{ev.quote}</span>
+                            </>
+                          ) : (
+                            <span className="evidence-quote">{ev}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+
                 <div className="blindspot-card__actions">
                   <button 
                     className="blindspot-card__btn-prune"

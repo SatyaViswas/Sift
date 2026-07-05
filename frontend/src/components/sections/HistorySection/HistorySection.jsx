@@ -446,7 +446,17 @@ function MonthPopover({ selectedDate, onSelectDate, onClose }) {
           <svg viewBox="0 0 24 24" fill="none" width="13" height="13"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
         </button>
         <span className="hist-month-popover__title">
-          {new Date(viewYear, viewMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          {new Date(viewYear, viewMonth).toLocaleDateString('en-US', { month: 'long' })}
+          <select 
+            value={viewYear}
+            onChange={(e) => setViewDate(new Date(parseInt(e.target.value), viewMonth, 1))}
+            className="hist-month-popover__year-select"
+            aria-label="Select year"
+          >
+            {Array.from({length: 10}, (_, i) => new Date().getFullYear() - i).map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
         </span>
         <button className="hist-month-popover__arrow" onClick={() => shiftMonth(1)} aria-label="Next month">
           <svg viewBox="0 0 24 24" fill="none" width="13" height="13"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -639,12 +649,22 @@ export default function HistorySection() {
         </div>
       </div>
 
-      {/* ── Week Calendar Strip ── */}
-      <WeekCalendar
-        selectedDate={selectedDate}
-        onSelectDate={navigateToDate}
-        hasEntries={hasEntries}
-      />
+      {/* ── Week Calendar Strip & Today Button ── */}
+      <div className="hist-calendar-row">
+        <WeekCalendar
+          selectedDate={selectedDate}
+          onSelectDate={navigateToDate}
+          hasEntries={hasEntries}
+        />
+        <button 
+          className="hist-today-btn" 
+          onClick={() => navigateToDate(new Date())}
+          aria-label="Go to Today"
+          title="Go to Today"
+        >
+          Today
+        </button>
+      </div>
 
       {/* ── Mobile Sub-Tab Switcher ── */}
       <div className="hist-mobile-tabs" role="tablist" aria-label="Entry type filter">

@@ -453,6 +453,7 @@ async def recover_memory(req: RecoverRequest, request: Request):
             "<GROUNDING_LAWS>\n"
             "1. You must treat the content inside <USER_PURE_HISTORY> and <FULL_TIMELINE_FROM_DAY_1> as the absolute, closed-world boundary of the user's past actions and life entries from Day 1. If an item, title, or location is not explicitly written there, the user has never experienced it.\n"
             "2. Content inside <PAST_AI_RECOMMENDATIONS> represents suggestions previously offered by the system, NOT historical actions taken by the user. You are strictly prohibited from mixing these logs up with the user's past life metrics. DO NOT hallucinate these as user actions.\n"
+            "3. ANTI-HALLUCINATION: <USER_PURE_HISTORY> contains abstracted semantic graph patterns which may lack specific dates. <FULL_TIMELINE_FROM_DAY_1> contains exact chronological events with dates. You must NEVER attach a date from the timeline to a pattern from the graph unless they explicitly match in the text. If an event has no date attached to it in the context, DO NOT invent one.\n"
             "</GROUNDING_LAWS>\n\n"
             "<SCENARIO_ANALYSIS>\n"
             "Analyze the user's query and classify it into exactly one of these four scenarios:\n"
@@ -466,7 +467,7 @@ async def recover_memory(req: RecoverRequest, request: Request):
             "  * 'scenario': String (Recommendation, Doubt_Clearing, Decision_Making, Historical_Recall).\n"
             "  * 'headline': Punchy 3-6 word title.\n"
             "  * 'primary_content': Rich Markdown string providing the core answer. Use lists, bolding, and structuring tailored to the scenario (e.g. Pros/Cons for Decision Making, chronological bullets for Recall).\n"
-            "  * 'historical_evidence': Array of strings citing explicit dates or entries used to ground the answer.\n"
+            "  * 'historical_evidence': Array of objects, each containing 'date' and 'quote'. Set 'quote' to the exact extracted string. DO NOT search for dates; strictly set 'date' to 'Pattern'.\n"
             "  * 'rationale': A brief closing paragraph explaining how this links back to the user's history.\n"
             "- You are STRICTLY FORBIDDEN from mentioning your internal rules, database statuses, XML blocks, or grounding parameters.\n"
             "- Write your reasoning organically and conversationally.\n"
@@ -529,6 +530,27 @@ async def recover_memory(req: RecoverRequest, request: Request):
         
         try:
             response_json = json.loads(analysis_result)
+            
+            # ARCHITECTURAL MANDATE 6: Deterministic Date Reconciliation
+            evidence_list = response_json.get("historical_evidence", [])
+            for ev in evidence_list:
+                if isinstance(ev, dict):
+                    quote = ev.get("quote", "").strip()
+                    # Perform fast deterministic lookup in native timeline
+                    if quote:
+                        match_found = False
+                        # Use a reasonable prefix length to avoid edge-case cutoffs
+                        search_target = quote[:40] if len(quote) > 40 else quote
+                        for log in filtered_full_timeline:
+                            if search_target in log:
+                                # Extract exact date from [YYYY-MM-DD]
+                                if log.startswith("[") and len(log) >= 12 and log[11] == "]":
+                                    ev["date"] = log[1:11]
+                                    match_found = True
+                                    break
+                        if not match_found:
+                            ev["date"] = "Pattern"
+            
             return {
                 "status": "success",
                 "data": response_json
@@ -669,7 +691,8 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "", token
         "Be universally receptive to any life scenario (whether it is about study stress, sports stamina, dietary fatigue, or work anxiety), but remain strictly grounded in reality—never invent, assume, or generalize a pattern that is not completely backed up by the user's authentic past entries.\n\n"
         "### Strict Output Formatting Rules:\n"
         "You must output ONLY a raw JSON array of objects. Do not include markdown code wrappers (like ```json). Each object must match this exact schema:\n"
-        '[{ "title": "<punchy headline>", "description": "<insightful cause-and-effect link>", "type": "positive" | "negative" | "neutral" }]'
+        '[{ "title": "<punchy headline>", "description": "<insightful cause-and-effect link>", "type": "positive" | "negative" | "neutral", "historical_evidence": [{"date": "Pattern", "quote": "<exact quote extracted from history>"}] }]\n'
+        "Set 'date' strictly to 'Pattern'. Do not invent or guess dates."
     )
     
     recent_snippets_context = ""
@@ -702,6 +725,25 @@ async def _generate_blindspots_logic(profile: str, full_history: str = "", token
         response_json = json.loads(analysis_result)
         if not isinstance(response_json, list):
             response_json = []
+            
+        # ARCHITECTURAL MANDATE 6: Deterministic Date Reconciliation (Blindspots)
+        for blindspot in response_json:
+            evidence_list = blindspot.get("historical_evidence", [])
+            for ev in evidence_list:
+                if isinstance(ev, dict):
+                    quote = ev.get("quote", "").strip()
+                    if quote:
+                        match_found = False
+                        search_target = quote[:40] if len(quote) > 40 else quote
+                        for log in raw_context_lines:
+                            if search_target in log:
+                                if log.startswith("[") and len(log) >= 12 and log[11] == "]":
+                                    ev["date"] = log[1:11]
+                                    match_found = True
+                                    break
+                        if not match_found:
+                            ev["date"] = "Pattern"
+                            
         return response_json
     except json.JSONDecodeError:
         print(f"LLM failed to output a valid JSON array for blindspots: {analysis_result}")

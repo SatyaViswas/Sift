@@ -255,14 +255,26 @@ export default function OracleSection() {
                             {renderMarkdown(card.answer.primary_content)}
                           </div>
                           {card.answer.historical_evidence && card.answer.historical_evidence.length > 0 && (
-                            <div className="choice-shield__evidence">
-                              <strong>Historical Evidence:</strong>
-                              <ul>
+                            <details className="choice-shield__evidence-dropdown">
+                              <summary className="choice-shield__evidence-summary">
+                                <span>Historical Evidence ({card.answer.historical_evidence.length})</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="chevron-icon"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                              </summary>
+                              <ul className="evidence-list">
                                 {card.answer.historical_evidence.map((ev, idx) => (
-                                  <li key={idx}>{ev}</li>
+                                  <li key={idx} className="evidence-list__item">
+                                    {typeof ev === 'object' ? (
+                                      <>
+                                        <span className="evidence-date">{ev.date}</span>
+                                        <span className="evidence-quote">{ev.quote}</span>
+                                      </>
+                                    ) : (
+                                      <span className="evidence-quote">{ev}</span>
+                                    )}
+                                  </li>
                                 ))}
                               </ul>
-                            </div>
+                            </details>
                           )}
                         </div>
                         <div className="choice-shield__footer">
