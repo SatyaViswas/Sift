@@ -32,7 +32,10 @@ export default function OracleSection() {
 
   const [safeguardTopic, setSafeguardTopic] = useState(null);
   const [feedbackDeleteConfig, setFeedbackDeleteConfig] = useState(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const inputRef = useRef(null);
+  const feedRef = useRef(null);
+  const bottomRef = useRef(null);
 
   const renderMarkdown = (text) => {
     if (!text) return null;
@@ -83,9 +86,8 @@ export default function OracleSection() {
       setQuery(text);
     },
     onFinalResult: (text) => {
-      // Auto-send when voice stops
       if (text.trim()) {
-        sendQuery(text);
+        setQuery(text);
       }
     }
   });
@@ -123,16 +125,39 @@ export default function OracleSection() {
   const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   // Auto-scroll to bottom of chat when messages change
-  const feedRef = useRef(null);
   const previousStreamLength = useRef(oracleCardsStream.length);
+  const scrollToBottom = useCallback(() => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, []);
+
   useEffect(() => {
-    if (feedRef.current) {
+    if (bottomRef.current) {
       if (oracleCardsStream.length > previousStreamLength.current || isOracleThinking || interimText) {
-        feedRef.current.scrollTop = feedRef.current.scrollHeight;
+        bottomRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
       }
       previousStreamLength.current = oracleCardsStream.length;
     }
   }, [oracleCardsStream, isOracleThinking, interimText]);
+
+  useEffect(() => {
+    if (!bottomRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // If the bottom element is NOT visible, show the scroll button
+        setShowScrollToBottom(!entry.isIntersecting);
+      },
+      {
+        root: null, // observe relative to viewport
+        rootMargin: '120px' // triggers slightly before reaching the actual bottom
+      }
+    );
+
+    observer.observe(bottomRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   // Combine query and interim text for live preview
   const displayValue = orbState === 'listening' && interimText ? query + interimText : query;
@@ -333,7 +358,20 @@ export default function OracleSection() {
             )}
           </div>
         )}
+
+        <div ref={bottomRef} style={{ height: '1px', width: '100%', flexShrink: 0 }} aria-hidden="true" />
       </div>
+
+      <button
+        type="button"
+        className={`oracle-feed__scroll-btn ${showScrollToBottom ? 'oracle-feed__scroll-btn--visible' : ''}`}
+        onClick={scrollToBottom}
+        aria-label="Scroll to bottom"
+      >
+        <svg viewBox="0 0 24 24" fill="none" width="18" height="18" aria-hidden="true">
+          <path d="M12 5v14m0 0-6-6m6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
 
       {/* ── Query Input Bar ── */}
       <div className="oracle-input-zone">
@@ -346,6 +384,7 @@ export default function OracleSection() {
               onClick={handleOrbClick}
               disabled={isOracleThinking}
               hideHint={true}
+              hideStatusText={true}
              />
           </div>
 

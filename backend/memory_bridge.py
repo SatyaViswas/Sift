@@ -313,7 +313,7 @@ async def ingest_memory(req: IngestRequest, background_tasks: BackgroundTasks):
 
 
 @app.post("/api/recover")
-async def recover_memory(req: RecoverRequest):
+async def recover_memory(req: RecoverRequest, request: Request):
     dataset_name = f"user_{req.profile}"
     
     try:
@@ -487,14 +487,36 @@ async def recover_memory(req: RecoverRequest):
         )
 
         t_llm_start = time.time()
-        llm_response = await acompletion(
-            model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.1
-        )
+        
+        async def do_llm():
+            return await acompletion(
+                model=os.getenv("LLM_MODEL", "gemini/gemini-3.1-flash-lite"),
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1
+            )
+            
+        llm_task = asyncio.create_task(do_llm())
+        
+        async def listen_for_disconnect():
+            while True:
+                if await request.is_disconnected():
+                    llm_task.cancel()
+                    break
+                await asyncio.sleep(0.5)
+                
+        disconnect_task = asyncio.create_task(listen_for_disconnect())
+        
+        try:
+            llm_response = await llm_task
+        except asyncio.CancelledError:
+            print("[TELEMETRY] LLM generation cancelled by client disconnect")
+            raise HTTPException(status_code=499, detail="Client Closed Request")
+        finally:
+            disconnect_task.cancel()
+
         t_llm_end = time.time()
         print(f"[TELEMETRY] LLM generation: {t_llm_end - t_llm_start:.2f}s")
         

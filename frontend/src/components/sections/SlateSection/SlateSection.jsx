@@ -807,6 +807,20 @@ export default function SlateSection() {
               <div className="slate-compose__actions">
                 <span className="slate-compose__shortcut" aria-hidden="true">⌘↵ to save</span>
                 <button
+                  type="button"
+                  className={`slate-compose__mic-inline ${orbState === 'listening' ? 'slate-compose__mic-inline--listening' : ''}`}
+                  onClick={handleOrbClick}
+                  disabled={isSubmitting}
+                  aria-label={orbState === 'listening' ? 'Stop voice input' : 'Start voice input'}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" width="16" height="16" aria-hidden="true">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill={orbState === 'listening' ? 'currentColor' : 'none'} fillOpacity={orbState === 'listening' ? 0.16 : 0} />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <button
                   id="slate-deep-submit-btn"
                   className={`slate-compose__submit ${isSubmitting ? 'slate-compose__submit--loading' : ''}`}
                   onClick={handleSubmit}

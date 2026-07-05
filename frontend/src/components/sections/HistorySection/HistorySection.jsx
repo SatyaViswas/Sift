@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { updateEntry } from '../../../utils/api';
 import { useMemory } from '../../../context/MemoryContext';
+import { useBookmarks } from '../../../context/BookmarksContext';
 import MemorySafeguardModal from '../../MemorySafeguardModal/MemorySafeguardModal';
+import BookmarksModal from '../../BookmarksModal/BookmarksModal';
 import './HistorySection.css';
 
 /* ─── Constants ─────────────────────────────────────────────── */
@@ -45,6 +47,66 @@ function buildMonthGrid(year, month) {
   for (let i = 0; i < firstDay; i++) grid.push(null);
   for (let d = 1; d <= daysInMonth; d++) grid.push(new Date(year, month, d));
   return grid;
+}
+
+/* ─── BookmarkControls ─────────────────────────────────────────── */
+function BookmarkControls({ currentBookmark, addBookmark, removeBookmark, currentDateKey, colors }) {
+  const [showPicker, setShowPicker] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setShowPicker(false);
+      }
+    };
+    if (showPicker) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showPicker]);
+
+  return (
+    <div className="hist-page__bookmark-controls">
+      <div className="hist-bookmark-trigger-wrapper" ref={ref}>
+        <button 
+          className={`hist-bookmark-trigger ${currentBookmark ? 'hist-bookmark-trigger--active' : ''}`}
+          onClick={() => {
+            if (currentBookmark) {
+              removeBookmark(currentDateKey);
+            } else {
+              setShowPicker(!showPicker);
+            }
+          }}
+          aria-label={currentBookmark ? "Remove bookmark for this day" : "Bookmark this day"}
+          style={{ color: currentBookmark ? currentBookmark.color : 'inherit' }}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill={currentBookmark ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
+        
+        {showPicker && !currentBookmark && (
+          <div className="hist-color-picker">
+            {colors.map(color => (
+              <button
+                key={color}
+                className="hist-color-option"
+                style={{ backgroundColor: color }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  addBookmark(currentDateKey, color);
+                  setShowPicker(false);
+                }}
+                aria-label={`Select color ${color}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /* ─── EntryCard ──────────────────────────────────────────────── */
@@ -193,15 +255,31 @@ function InlineEditor({ entry, onSave, onCancel }) {
 }
 
 /* ─── JournalPage ────────────────────────────────────────────── */
-function JournalPage({ title, entries, editingId, onEdit, onDelete, onSave, onCancelEdit, isRight, fadingId }) {
+function JournalPage({ title, entries, editingId, onEdit, onDelete, onSave, onCancelEdit, isRight, fadingId, bookmarkColor, bookmarkControls }) {
   return (
     <div className={`hist-page${isRight ? ' hist-page--right-tint' : ''}`}>
       {/* Page margin line (left gutter rule) */}
       <div className="hist-page__margin" aria-hidden="true" />
 
+      {bookmarkColor && !isRight && (
+        <div 
+          className="hist-bookmark-ribbon" 
+          style={{ backgroundColor: bookmarkColor }}
+          aria-hidden="true"
+        />
+      )}
+      {bookmarkColor && isRight && (
+        <div 
+          className="hist-bookmark-ribbon hist-bookmark-ribbon--mobile-only" 
+          style={{ backgroundColor: bookmarkColor }}
+          aria-hidden="true"
+        />
+      )}
+
       <div className="hist-page__header">
         <span className="hist-page__corner-fold" aria-hidden="true" />
         <p className="hist-page__title">{title}</p>
+        {bookmarkControls}
       </div>
 
       {/* Horizontal ruling lines under content */}
@@ -428,10 +506,22 @@ export default function HistorySection() {
   const [mobileTab, setMobileTab] = useState('deep');
   const [bookMounted, setBookMounted] = useState(false);
 
-  // Page-flip animation state
   const [pageFlipping, setPageFlipping] = useState(false);
   const [flipDirection, setFlipDirection] = useState('forward'); // 'forward' | 'backward'
   const prevDateRef = useRef(selectedDate);
+
+  const { getBookmarkForDate, addBookmark, removeBookmark } = useBookmarks();
+  const [showBookmarksModal, setShowBookmarksModal] = useState(false);
+
+  const currentBookmark = getBookmarkForDate(toDateKey(selectedDate));
+  
+  const BOOKMARK_COLORS = [
+    '#e74c3c', // Red
+    '#3498db', // Blue
+    '#2ecc71', // Green
+    '#f1c40f', // Yellow
+    '#9b59b6', // Purple
+  ];
 
   useEffect(() => {
     const t = setTimeout(() => setBookMounted(true), 80);
@@ -494,18 +584,35 @@ export default function HistorySection() {
     pageFlipping ? `hist-mobile-page--flip-${flipDirection}` : '',
   ].filter(Boolean).join(' ');
 
+  const bookmarkControlsNode = (
+    <BookmarkControls 
+      currentBookmark={currentBookmark}
+      addBookmark={addBookmark}
+      removeBookmark={removeBookmark}
+      currentDateKey={currentDateKey}
+      colors={BOOKMARK_COLORS}
+    />
+  );
+
   return (
     <section className="hist-section" aria-label="The Archives — Historical journal entries">
 
       {/* ── Section Header ── */}
       <div className="hist-section__header">
         <div className="hist-section__header-left">
-          <h1 className="hist-section__title">The Archives</h1>
-          <p className="hist-section__subtitle">
-            {dayEntries.length > 0
-              ? `${dayEntries.length} ${dayEntries.length === 1 ? 'entry' : 'entries'} · ${formatDate(selectedDate)}`
-              : formatDate(selectedDate)}
-          </p>
+          <div className="hist-section__title-row">
+            <h1 className="hist-section__title">The Archives</h1>
+            <button 
+              className="hist-bookmarks-btn" 
+              onClick={() => setShowBookmarksModal(true)}
+              aria-label="View saved bookmarks"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+              </svg>
+              Bookmarks
+            </button>
+          </div>
         </div>
 
         <div className="hist-section__header-right">
@@ -520,6 +627,16 @@ export default function HistorySection() {
               <path d="M8 2v4M16 2v4M3 10h18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
             {formatMonthYear(selectedDate)}
+          </button>
+          
+          <button 
+            className="hist-bookmarks-btn-mobile" 
+            onClick={() => setShowBookmarksModal(true)}
+            aria-label="View saved bookmarks"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
           </button>
 
           {showMonthPicker && (
@@ -574,6 +691,7 @@ export default function HistorySection() {
             onCancelEdit={handleCancelEdit}
             isRight={false}
             fadingId={fadingId}
+            bookmarkColor={currentBookmark?.color}
           />
         </div>
 
@@ -595,6 +713,8 @@ export default function HistorySection() {
             onCancelEdit={handleCancelEdit}
             isRight={true}
             fadingId={fadingId}
+            bookmarkColor={currentBookmark?.color}
+            bookmarkControls={bookmarkControlsNode}
           />
         </div>
       </div>
@@ -611,6 +731,8 @@ export default function HistorySection() {
           onCancelEdit={handleCancelEdit}
           isRight={mobileTab === 'snippet'}
           fadingId={fadingId}
+          bookmarkColor={currentBookmark?.color}
+          bookmarkControls={bookmarkControlsNode}
         />
       </div>
 
@@ -621,6 +743,14 @@ export default function HistorySection() {
           topic={safeguardEntry.content}
           onClose={() => setSafeguardEntry(null)}
           onForgotten={handleForgotten}
+        />
+      )}
+
+      {/* ── Bookmarks Modal ── */}
+      {showBookmarksModal && (
+        <BookmarksModal
+          onClose={() => setShowBookmarksModal(false)}
+          onSelectDate={navigateToDate}
         />
       )}
 

@@ -6,9 +6,12 @@
 .slate-section {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  /* Fill the flex parent (SectionManager__view) — no fixed heights needed */
+  flex: 1;
   position: relative;
   z-index: 1;
+  /* Prevent background bleed on iOS */
+  min-height: 0;
 }
 
 .slate-section::before {
@@ -141,7 +144,7 @@
   background: var(--color-bg-elevated);
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-pill);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
   transition:
     border-color var(--dur-normal) var(--ease-out-soft),
     box-shadow var(--dur-normal) var(--ease-out-soft);
@@ -164,6 +167,8 @@
   color: var(--color-text-primary);
   line-height: 1.5;
   min-width: 0;
+  /* Prevent text from being hidden on very small screens */
+  min-width: 0;
 }
 
 .slate-compose__snippet-input::placeholder {
@@ -181,6 +186,13 @@
   color: var(--color-text-muted);
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* Hide keyboard shortcut hint on mobile — it's irrelevant for touch */
+@media (max-width: 767px) {
+  .slate-compose__snippet-hint {
+    display: none;
+  }
 }
 
 .slate-compose__snippet-mic {
@@ -381,6 +393,8 @@
   border-top: 1px solid var(--color-border);
   position: relative;
   z-index: 1;
+  gap: var(--space-2);
+  flex-wrap: nowrap;
 }
 
 .slate-compose__char-count {
@@ -388,6 +402,7 @@
   font-size: var(--type-xs);
   color: var(--color-text-muted);
   transition: color var(--dur-normal);
+  flex-shrink: 0;
 }
 
 .slate-compose__char-count--warn {
@@ -397,13 +412,56 @@
 .slate-compose__actions {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.slate-compose__mic-inline {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: all var(--dur-fast) var(--ease-out-soft);
+}
+
+.slate-compose__mic-inline:hover:not(:disabled) {
+  color: var(--color-accent-slate);
+  border-color: var(--color-accent-slate);
+  background: var(--color-accent-slate-soft);
+}
+
+.slate-compose__mic-inline--listening {
+  color: var(--color-accent-slate);
+  border-color: var(--color-accent-slate);
+  background: var(--color-accent-slate-soft);
+}
+
+.slate-compose__mic-inline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .slate-compose__shortcut {
   font-size: var(--type-xs);
   color: var(--color-text-muted);
   font-family: var(--font-mono);
+}
+
+/* Hide keyboard shortcut label on mobile */
+@media (max-width: 767px) {
+  .slate-compose__shortcut {
+    display: none;
+  }
+
+  .slate-compose__mic-inline {
+    display: inline-flex;
+  }
 }
 
 .slate-compose__mode-badge {
@@ -415,6 +473,13 @@
   border-radius: var(--radius-pill);
   padding: 2px 8px;
   animation: fade-in var(--dur-normal) var(--ease-out-soft) both;
+}
+
+/* On mobile, hide the mode badge in footer to save space — it's already shown in mode switcher */
+@media (max-width: 767px) {
+  .slate-compose__mode-badge {
+    display: none;
+  }
 }
 
 .slate-compose__submit {
@@ -473,8 +538,10 @@
   gap: var(--space-2);
   padding: var(--space-3) 0 var(--space-4);
   position: sticky;
+  /* Stick above the fixed BottomNav */
   bottom: calc(var(--nav-h) + var(--space-2));
-  z-index: 10;
+  /* Sit BELOW compose, ABOVE feed items — never overlaps the compose area */
+  z-index: 5;
   pointer-events: none;
 }
 
@@ -482,10 +549,17 @@
   pointer-events: all;
 }
 
+@media (max-width: 767px) {
+  .slate-orb-zone {
+    display: none;
+  }
+}
+
 /* ─── Entry Feed ──────────────────────────────────────────── */
 .slate-feed {
   flex: 1;
-  padding: var(--space-4) var(--space-5) calc(var(--nav-h) + var(--space-8));
+  /* On mobile: bottom padding clears the fixed BottomNav + safe area */
+  padding: var(--space-4) var(--space-5) calc(var(--nav-h) + var(--space-8) + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

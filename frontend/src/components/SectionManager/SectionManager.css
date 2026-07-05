@@ -5,6 +5,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* Takes the remaining space between AppHeader and BottomNav */
+  min-height: 0;
 }
 
 .section-manager__view {
@@ -13,10 +15,12 @@
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
   /* Momentum scrolling on iOS */
   -webkit-overflow-scrolling: touch;
   min-height: 0;
+  /* Ensure last content doesn't hide behind fixed BottomNav on mobile */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Desktop: section fills the main panel height properly */
@@ -28,6 +32,7 @@
 
   .section-manager__view {
     height: 100%;
+    padding-bottom: 0;
   }
 }
 

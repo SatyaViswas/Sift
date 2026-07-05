@@ -6,8 +6,9 @@
 }
 
 .app-header {
-  position: relative;
-  height: 64px;
+  position: sticky;
+  top: 0;
+  height: var(--header-h);
   flex-shrink: 0;
   background: var(--color-bg-base);
   border-bottom: 1px solid var(--color-border);

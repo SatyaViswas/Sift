@@ -1,16 +1,20 @@
 import asyncio
 import os
 import cognee
-from dotenv import load_dotenv
+from cognee.api.v1.search import SearchType
 
-load_dotenv()
-if os.getenv("LLM_API_KEY") and not os.getenv("GEMINI_API_KEY"):
-    os.environ["GEMINI_API_KEY"] = os.getenv("LLM_API_KEY")
+os.environ["GEMINI_API_KEY"] = "fake_key"
+os.environ["OPENAI_API_KEY"] = "fake_key"
+os.environ["LLM_PROVIDER"] = "gemini"
+os.environ["EMBEDDING_PROVIDER"] = "gemini"
 
-async def main():
-    dataset_name = "user_default_user"
-    res = await cognee.recall("pickel ball", datasets=[dataset_name])
-    print(res)
+async def test():
+    await cognee.add("Hello world", dataset_name="test_only_context")
+    await cognee.cognify(datasets=["test_only_context"])
+    try:
+        res = await cognee.recall("Hello", datasets=["test_only_context"], query_type=SearchType.GRAPH_COMPLETION, only_context=True)
+        print("Success! Result:", res)
+    except Exception as e:
+        print("Error:", e)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+asyncio.run(test())

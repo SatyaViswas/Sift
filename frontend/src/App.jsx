@@ -2,6 +2,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { NavigationProvider } from './context/NavigationContext';
 import { MemoryProvider } from './context/MemoryContext';
+import { BookmarksProvider } from './context/BookmarksContext';
 import Chassis from './components/Chassis/Chassis';
 import LandingPage from './pages/LandingPage/LandingPage';
 
@@ -42,9 +43,11 @@ function AppShell() {
   return (
     <ThemeProvider>
       <NavigationProvider>
-        <MemoryProvider>
-          <Chassis />
-        </MemoryProvider>
+        <BookmarksProvider>
+          <MemoryProvider>
+            <Chassis />
+          </MemoryProvider>
+        </BookmarksProvider>
       </NavigationProvider>
     </ThemeProvider>
   );

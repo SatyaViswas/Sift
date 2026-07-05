@@ -157,6 +157,9 @@ async def run_authentic_seeder():
     supabase_rows, cognee_monthly_logs = generate_timeline(user_id)
     print(f"Generated {len(supabase_rows)} daily entries.")
     
+    # ---------------------------------------------------------
+    # 2. Upload authentic raw entries to Supabase (Skipped)
+    # ---------------------------------------------------------
     print("\n2. Skipping Supabase Upload (Already populated)...")
     # chunk_size = 200
     # for i in range(0, len(supabase_rows), chunk_size):
@@ -167,7 +170,7 @@ async def run_authentic_seeder():
     #     except Exception as e:
     #         print(f"❌ Failed to insert chunk: {e}")
     #         return
-            
+    #         
     # print("✅ Supabase Upload Complete.")
     
     print("\n3. Building Vector Knowledge Graph via Cognee (Resuming at Month 5)...")

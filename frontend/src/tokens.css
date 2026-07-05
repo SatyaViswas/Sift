@@ -100,6 +100,10 @@
   --color-orb-idle:       var(--prim-stone-200);
   --color-orb-idle-icon:  var(--prim-ink-400);
 
+  /* Semantic Negative / Danger Colors */
+  --color-negative:            var(--prim-rose-500);
+  --color-text-danger:         var(--prim-rose-500);
+
   /* Canvas atmospheric gradients per section */
   --canvas-slate:  radial-gradient(ellipse at 50% 40%, hsl(38, 65%, 85%) 0%, var(--prim-paper-white) 70%);
   --canvas-oracle: radial-gradient(ellipse at 50% 40%, hsl(152, 40%, 85%) 0%, var(--prim-paper-white) 70%);
@@ -150,6 +154,10 @@
 
   --color-orb-idle:       var(--prim-void-700);
   --color-orb-idle-icon:  var(--prim-ghost-400);
+
+  /* Semantic Negative / Danger Colors */
+  --color-negative:            var(--prim-rose-400);
+  --color-text-danger:         var(--prim-rose-400);
 
   --canvas-slate:  radial-gradient(ellipse at 50% 40%, hsl(38, 40%, 14%) 0%, hsl(228, 28%, 7%) 70%);
   --canvas-oracle: radial-gradient(ellipse at 50% 40%, hsl(152, 25%, 13%) 0%, hsl(228, 28%, 7%) 70%);
@@ -216,4 +224,7 @@
 
   /* Nav bar height */
   --nav-h: 80px;
+
+  /* Mobile top header height */
+  --header-h: 64px;
 }

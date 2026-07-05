@@ -1,0 +1,206 @@
+.bookmarks-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: var(--color-scrim);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  animation: bookmarksOverlayIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes bookmarksOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.bookmarks-modal {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: bookmarksModalIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes bookmarksModalIn {
+  from { 
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to { 
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.bookmarks-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+}
+
+.bookmarks-modal__title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #ffffff);
+}
+
+.bookmarks-modal__close {
+  background: none;
+  border: none;
+  color: var(--text-muted, #8a8a93);
+  cursor: pointer;
+  padding: 0.5rem;
+  margin: -0.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.bookmarks-modal__close:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  color: var(--text-primary, #ffffff);
+}
+
+.bookmarks-modal__content {
+  padding: 1rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.bookmarks-modal__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--text-muted, #8a8a93);
+}
+
+.bookmarks-modal__empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.bookmarks-modal__empty p {
+  margin: 0 0 0.5rem 0;
+  font-weight: 500;
+  color: var(--text-secondary, #b4b4bb);
+}
+
+.bookmarks-modal__empty span {
+  font-size: 0.875rem;
+}
+
+.bookmarks-modal__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bookmarks-modal__item {
+  display: flex;
+  align-items: center;
+  background: var(--bg-surface-alt, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.bookmarks-modal__item:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  border-color: var(--border-color-hover, rgba(255, 255, 255, 0.1));
+}
+
+.bookmarks-modal__item-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: none;
+  border: none;
+  padding: 1rem;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary, #ffffff);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.bookmarks-modal__color-indicator {
+  width: 12px;
+  height: 24px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2);
+}
+
+.bookmarks-modal__remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted, #8a8a93);
+  padding: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bookmarks-modal__remove-btn:hover {
+  color: #ff5e5e;
+  background: rgba(255, 94, 94, 0.1);
+}
+
+/* Light mode adjustments */
+@media (prefers-color-scheme: light) {
+  .bookmarks-modal {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  }
+  
+  .bookmarks-modal__title, .bookmarks-modal__item-btn {
+    color: #1a1a1a;
+  }
+  
+  .bookmarks-modal__close, .bookmarks-modal__empty, .bookmarks-modal__remove-btn {
+    color: #666;
+  }
+  
+  .bookmarks-modal__item {
+    background: #f9f9f9;
+    border-color: rgba(0, 0, 0, 0.05);
+  }
+  
+  .bookmarks-modal__item:hover {
+    background: #f0f0f0;
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+  
+  .bookmarks-modal__close:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #000;
+  }
+}

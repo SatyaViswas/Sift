@@ -9,7 +9,7 @@ import './MicOrb.css';
  *   onClick: () => void — toggle listening on/off
  *   disabled: boolean
  */
-export default function MicOrb({ orbState = 'idle', isSupported = true, onClick, disabled = false, hideHint = false }) {
+export default function MicOrb({ orbState = 'idle', isSupported = true, onClick, disabled = false, hideHint = false, hideStatusText = false }) {
   const label = {
     idle:       'Tap to start voice input',
     listening:  'Tap to stop recording',
@@ -98,9 +98,9 @@ export default function MicOrb({ orbState = 'idle', isSupported = true, onClick,
         )}
       </button>
 
-      {!hideHint && <p className="mic-orb__hint" aria-live="polite">{hint}</p>}
+      {!hideHint && !hideStatusText && <p className="mic-orb__hint" aria-live="polite">{hint}</p>}
 
-      {!isSupported && (
+      {!isSupported && !hideStatusText && (
         <p className="mic-orb__unsupported" role="alert">
           Voice input unavailable in this browser.
           <br />Use Chrome or Safari for best results.
