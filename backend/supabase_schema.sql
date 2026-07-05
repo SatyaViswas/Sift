@@ -63,3 +63,20 @@ CREATE POLICY "Users can insert own metadata" ON public.user_metadata
 
 CREATE POLICY "Users can update own metadata" ON public.user_metadata 
   FOR UPDATE USING (profile = auth.uid()::text OR profile = 'default_user');
+
+-- ── Bookmarks Table ── --
+CREATE TABLE IF NOT EXISTS public.bookmarks (
+    id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users NOT NULL,
+    date_key TEXT NOT NULL,
+    color TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(user_id, date_key)
+);
+
+-- Enable RLS
+ALTER TABLE public.bookmarks ENABLE ROW LEVEL SECURITY;
+
+-- Allow users to manage only their own bookmarks
+CREATE POLICY "Users can manage own bookmarks" ON public.bookmarks
+  FOR ALL USING (auth.uid() = user_id);

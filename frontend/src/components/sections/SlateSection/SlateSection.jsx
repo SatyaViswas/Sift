@@ -495,7 +495,7 @@ export default function SlateSection() {
     stopListening,
     resetTranscript,
   } = useSpeechRecognition({
-    silenceTimeoutMs: 2500,
+    silenceTimeoutMs: 8000,
     onTranscriptUpdate: (text) => {
       // Allow voice to capture up to DEEP_MAX_CHARS, we will truncate on submit if snippet mode
       const merged = text.slice(0, DEEP_MAX_CHARS);

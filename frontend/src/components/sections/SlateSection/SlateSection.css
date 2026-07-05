@@ -1545,8 +1545,9 @@
 
 .slate-voice-sanctuary__close {
   position: absolute;
-  top: var(--space-5);
+  top: calc(var(--space-5) + env(safe-area-inset-top, 0px));
   right: var(--space-5);
+  z-index: 10;
   width: 40px;
   height: 40px;
   border-radius: var(--radius-pill);

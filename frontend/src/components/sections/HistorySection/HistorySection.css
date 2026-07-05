@@ -1483,7 +1483,7 @@
   margin-top: 0;
 }
 
-.hist-bookmarks-btn, .hist-bookmarks-btn-mobile {
+.hist-bookmarks-btn {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -1498,22 +1498,18 @@
   transition: all var(--dur-fast) var(--ease-out-soft);
 }
 
-.hist-bookmarks-btn:hover, .hist-bookmarks-btn-mobile:hover {
+.hist-bookmarks-btn:hover {
   background: var(--color-bg-hover);
   border-color: var(--color-accent-history);
   color: var(--color-accent-history);
 }
 
-.hist-bookmarks-btn-mobile {
-  padding: var(--space-2);
-}
-
-/* Mobile vs Desktop button visibility */
 @media (max-width: 767px) {
-  .hist-bookmarks-btn { display: none; }
-}
-@media (min-width: 768px) {
-  .hist-bookmarks-btn-mobile { display: none; }
+  .hist-section__title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
 }
 
 .hist-page__bookmark-controls {
