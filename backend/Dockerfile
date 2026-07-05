@@ -27,8 +27,9 @@ COPY . .
 # Ensure the start script is executable
 RUN chmod +x start.sh
 
-# Expose the gateway port (Render injects PORT, usually 5051 if we specify or dynamically)
-EXPOSE 5051
+# Expose the gateway port for Hugging Face Spaces (Must be 7860)
+ENV PORT=7860
+EXPOSE 7860
 EXPOSE 8000
 
 # Start both services
