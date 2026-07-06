@@ -424,6 +424,8 @@
   align-items: center;
   gap: var(--space-3);
   animation: fade-in var(--dur-slow) var(--ease-out-soft) 55ms both;
+  width: 100%;
+  min-width: 0;
 }
 
 .hist-today-btn {
@@ -457,6 +459,7 @@
   align-items: center;
   gap: var(--space-2);
   flex: 1;
+  min-width: 0;
 }
 
 .hist-week-cal__arrow {
@@ -644,12 +647,49 @@
 /* Mobile: book hidden */
 .hist-book { display: none; }
 .hist-mobile-tabs { display: flex; }
-.hist-mobile-page { display: flex; }
+.hist-mobile-page { display: flex; width: 100%; }
+.hist-today-btn { display: none; } /* Hide on mobile */
+
+/* ── Mobile Today Button in Popover ── */
+.hist-month-popover__footer {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: center;
+}
+
+.hist-today-btn-mobile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-history-soft);
+  color: var(--color-accent-history);
+  font-size: var(--type-sm);
+  font-weight: 600;
+  border: 1px solid hsl(35 60% 54% / 0.28);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out-soft);
+  width: 100%;
+}
+
+.hist-today-btn-mobile:hover {
+  background: hsl(35 60% 54% / 0.18);
+  transform: translateY(-1px);
+}
+
+.hist-today-btn-mobile:active {
+  transform: scale(0.97);
+}
 
 /* ── Desktop: show the open book ─────────────────────────────── */
 @media (min-width: 768px) {
   .hist-mobile-tabs { display: none; }
   .hist-mobile-page { display: none; }
+  .hist-today-btn { display: flex; } /* Show on desktop */
+  .hist-today-btn-mobile { display: none; } /* Hide in popover on desktop if you prefer, but we keep it here just in case */
 
   .hist-book {
     display: flex;

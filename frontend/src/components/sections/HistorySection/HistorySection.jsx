@@ -490,6 +490,14 @@ function MonthPopover({ selectedDate, onSelectDate, onClose }) {
           );
         })}
       </div>
+      <div className="hist-month-popover__footer">
+        <button 
+          className="hist-today-btn-mobile" 
+          onClick={() => { onSelectDate(new Date()); onClose(); }}
+        >
+          Go to Today
+        </button>
+      </div>
     </div>
   );
 }
