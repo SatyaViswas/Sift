@@ -387,8 +387,8 @@ app.post('/api/memory/improve', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Déjà Gateway v2 running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Déjà Gateway v2 running on port ${PORT} (0.0.0.0)`);
 });
 
 process.on('unhandledRejection', (reason, promise) => { console.error('Unhandled Rejection:', reason); });
